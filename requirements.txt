@@ -1,0 +1,28 @@
+# Core API dependencies
+fastapi
+uvicorn
+pydantic
+
+# String matching and fuzzy logic
+rapidfuzz
+
+# Geospatial and geocoding
+geopy
+
+# Machine learning
+scikit-learn
+numpy
+pandas
+
+# Utilities
+python-multipart
+httpx
+python-dotenv
+loguru
+
+# Development and testing
+pytest
+pytest-asyncio
+
+# Optional: Address parsing (requires libpostal system library)
+# postal
