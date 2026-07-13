@@ -9,6 +9,10 @@ from app.geocoding_service import GeocodingService
 from app.ml_model import AddressMatchingMLModel
 
 
+class AddressMatchingError(Exception):
+    """Raised when address matching fails due to an unexpected internal error."""
+
+
 class AddressMatcher:
     """
     Enhanced address matcher that integrates all matching components with region awareness.
@@ -33,7 +37,8 @@ class AddressMatcher:
         
         # Initialize components that don't need region
         self.geocoding_service = GeocodingService(
-            user_agent=self.config.get('geocoding_user_agent', 'address-matching-service')
+            user_agent=self.config.get('geocoding_user_agent', 'address-matching-service'),
+            timeout=int(self.config.get('geocoding_timeout', 10)),
         )
         self.ml_model = AddressMatchingMLModel(
             model_path=self.config.get('ml_model_path')
@@ -126,7 +131,12 @@ class AddressMatcher:
                     address1, address2, self.distance_threshold
                 )
                 geospatial_distance = geospatial_result.get('distance_meters')
-                geospatial_supports_match = geospatial_result.get('match', False)
+                # Only trust threshold when both addresses geocoded successfully.
+                # GeocodingService returns `within_threshold` (not `match`).
+                if geospatial_result.get('geocoding_successful'):
+                    geospatial_supports_match = geospatial_result.get('within_threshold', False)
+                else:
+                    geospatial_supports_match = None
             
             # Step 5: Rule-based filtering with region awareness
             logger.debug("Step 4: Applying region-aware rule-based filtering")
@@ -170,10 +180,11 @@ class AddressMatcher:
             logger.info(f"Address matching completed for region {detected_region}: match={final_match}, confidence={final_confidence:.3f}")
             return response
             
+        except AddressMatchingError:
+            raise
         except Exception as e:
-            logger.error(f"Error in address matching: {e}")
-            # Return a default response in case of error
-            return self._create_error_response(address1, address2, str(e))
+            logger.exception("Unexpected error in address matching")
+            raise AddressMatchingError("Address matching failed due to an internal error") from e
     
     def _prepare_ml_features(
         self,
@@ -407,34 +418,6 @@ class AddressMatcher:
         
         return match, confidence
     
-    def _create_error_response(self, address1: str, address2: str, error_msg: str) -> AddressMatchResponse:
-        """
-        Create an error response when matching fails.
-        """
-        logger.error(f"Creating error response: {error_msg}")
-        
-        # Create minimal normalized addresses
-        normalized_addr1 = NormalizedAddress()
-        normalized_addr2 = NormalizedAddress()
-        
-        # Create empty similarities
-        component_similarities = ComponentSimilarities()
-        
-        details = MatchDetails(
-            normalized_address1=normalized_addr1,
-            normalized_address2=normalized_addr2,
-            component_similarities=component_similarities,
-            geospatial_distance_meters=None,
-            rule_based_decision=False,
-            ml_model_decision=None
-        )
-        
-        return AddressMatchResponse(
-            match=False,
-            confidence_score=0.0,
-            details=details
-        )
-    
     def update_config(self, new_config: Dict[str, Any]):
         """
         Update configuration values.
@@ -479,17 +462,15 @@ class AddressMatcher:
             
         Returns:
             List of AddressMatchResponse objects
+            
+        Raises:
+            AddressMatchingError: If any pair fails due to an internal error
         """
         results = []
         
         for addr1, addr2 in address_pairs:
-            try:
-                result = await self.match_addresses(addr1, addr2, region)
-                results.append(result)
-            except Exception as e:
-                logger.error(f"Error matching addresses '{addr1}' vs '{addr2}': {e}")
-                error_response = self._create_error_response(addr1, addr2, str(e))
-                results.append(error_response)
+            result = await self.match_addresses(addr1, addr2, region)
+            results.append(result)
         
         return results
     

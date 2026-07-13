@@ -418,14 +418,14 @@ class TestRegionalConfiguration:
     
     def test_address_matching_config(self):
         """Test comprehensive address matching configuration."""
-        # Test with different regions
-        us_config = AddressMatchingConfig(region='US')
+        # Test with different regions (ignore process env for determinism)
+        us_config = AddressMatchingConfig(region='US', apply_env=False)
         assert us_config.region == 'US'
         
         rule_config = us_config.get_component_config('rule_based_filter')
         assert rule_config['state_abbreviation_matching'] is True
         
-        in_config = AddressMatchingConfig(region='IN')
+        in_config = AddressMatchingConfig(region='IN', apply_env=False)
         assert in_config.region == 'IN'
         
         rule_config = in_config.get_component_config('rule_based_filter')
@@ -433,7 +433,7 @@ class TestRegionalConfiguration:
     
     def test_config_validation(self):
         """Test configuration validation."""
-        config = AddressMatchingConfig(region='US')
+        config = AddressMatchingConfig(region='US', apply_env=False)
         errors = config.validate_config()
         assert len(errors) == 0  # Should have no validation errors
         
@@ -445,6 +445,58 @@ class TestRegionalConfiguration:
         })
         errors = config.validate_config()
         assert len(errors) > 0  # Should have validation errors
+
+    def test_environment_overrides_and_matcher_config(self, monkeypatch):
+        """Env vars should override defaults and flatten for AddressMatcher."""
+        monkeypatch.setenv('ADDRESS_MATCHING_REGION', 'UK')
+        monkeypatch.setenv('USE_ML_MODEL', 'false')
+        monkeypatch.setenv('USE_GEOSPATIAL', 'true')
+        monkeypatch.setenv('DISTANCE_THRESHOLD', '75.5')
+        monkeypatch.setenv('GEOCODING_USER_AGENT', 'test-agent')
+        monkeypatch.setenv('GEOCODING_TIMEOUT', '15')
+        monkeypatch.setenv('OVERALL_THRESHOLD', '0.85')
+        monkeypatch.setenv('REQUIRE_CITY_MATCH', 'false')
+        monkeypatch.setenv('ML_MODEL_PATH', '/tmp/model.pkl')
+        monkeypatch.setenv('API_HOST', '127.0.0.1')
+        monkeypatch.setenv('API_PORT', '9000')
+        monkeypatch.setenv('LOG_LEVEL', 'DEBUG')
+
+        config = AddressMatchingConfig(region='US', apply_env=True)
+        assert config.region == 'UK'
+
+        matcher_config = config.to_matcher_config()
+        assert matcher_config['default_region'] == 'UK'
+        assert matcher_config['use_ml_model'] is False
+        assert matcher_config['use_geospatial'] is True
+        assert matcher_config['distance_threshold'] == 75.5
+        assert matcher_config['geocoding_user_agent'] == 'test-agent'
+        assert matcher_config['geocoding_timeout'] == 15
+        assert matcher_config['ml_model_path'] == '/tmp/model.pkl'
+        assert matcher_config['rules']['overall_threshold'] == 0.85
+        assert matcher_config['rules']['require_city_match'] is False
+        assert matcher_config['api_host'] == '127.0.0.1'
+        assert matcher_config['api_port'] == 9000
+        assert matcher_config['log_level'] == 'DEBUG'
+
+        matcher = AddressMatcher(matcher_config)
+        assert matcher.use_ml_model is False
+        assert matcher.use_geospatial is True
+        assert matcher.distance_threshold == 75.5
+        assert matcher.default_region == 'UK'
+        assert matcher.geocoding_service.user_agent == 'test-agent'
+        assert matcher.geocoding_service.timeout == 15
+
+    def test_disable_flags_override_use_flags(self, monkeypatch):
+        """DISABLE_* flags should win over USE_* toggles."""
+        monkeypatch.setenv('USE_ML_MODEL', 'true')
+        monkeypatch.setenv('DISABLE_ML_MODEL', '1')
+        monkeypatch.setenv('USE_GEOSPATIAL', 'true')
+        monkeypatch.setenv('DISABLE_GEOSPATIAL', '1')
+
+        config = AddressMatchingConfig(region='US', apply_env=True)
+        matcher_config = config.to_matcher_config()
+        assert matcher_config['use_ml_model'] is False
+        assert matcher_config['use_geospatial'] is False
 
 
 class TestIntegratedAddressMatching:
@@ -601,6 +653,123 @@ class TestPerformanceAndEdgeCases:
         expected_regions = ['US', 'CA', 'UK', 'DE', 'FR', 'IT', 'ES', 'IN', 'AU', 'NL', 'SE', 'NO', 'CH']
         for region in expected_regions:
             assert region in supported_regions
+
+
+class TestGeospatialWiring:
+    """Regression tests for geospatial result wiring into final decision."""
+
+    @pytest.mark.asyncio
+    async def test_within_threshold_is_used_when_geocoding_succeeds(self):
+        """GeocodingService returns `within_threshold`, not `match`."""
+        matcher = AddressMatcher({'use_geospatial': True, 'use_ml_model': False})
+        captured = {}
+
+        async def fake_geo(address1, address2, distance_threshold=50.0):
+            return {
+                'distance_meters': 12.0,
+                'within_threshold': True,
+                'geocoding_successful': True,
+                'coords1': (37.0, -122.0),
+                'coords2': (37.0, -122.0),
+            }
+
+        original_decision = matcher._make_final_decision
+
+        def capture_decision(*args, **kwargs):
+            captured['args'] = args
+            return original_decision(*args, **kwargs)
+
+        matcher.geocoding_service.validate_addresses_geospatially = fake_geo
+        with patch.object(matcher, '_make_final_decision', side_effect=capture_decision):
+            await matcher.match_addresses(
+                "123 Main St, Anytown, CA 90210",
+                "123 Main Street, Anytown, CA 90210",
+                region='US',
+            )
+
+        # Positional args: rule, ml, similarity, distance, ml_conf, region, geospatial_supports_match
+        assert captured['args'][3] == 12.0
+        assert captured['args'][6] is True
+
+    @pytest.mark.asyncio
+    async def test_failed_geocoding_does_not_claim_support(self):
+        """Default within_threshold=True must not boost when geocoding failed."""
+        matcher = AddressMatcher({'use_geospatial': True, 'use_ml_model': False})
+        captured = {}
+
+        async def fake_geo(address1, address2, distance_threshold=50.0):
+            return {
+                'distance_meters': None,
+                'within_threshold': True,  # service default when lookup fails
+                'geocoding_successful': False,
+                'coords1': None,
+                'coords2': None,
+            }
+
+        original_decision = matcher._make_final_decision
+
+        def capture_decision(*args, **kwargs):
+            captured['args'] = args
+            return original_decision(*args, **kwargs)
+
+        matcher.geocoding_service.validate_addresses_geospatially = fake_geo
+        with patch.object(matcher, '_make_final_decision', side_effect=capture_decision):
+            await matcher.match_addresses(
+                "123 Main St, Anytown, CA 90210",
+                "123 Main Street, Anytown, CA 90210",
+                region='US',
+            )
+
+        assert captured['args'][6] is None
+
+
+class TestErrorPropagation:
+    """Internal failures must surface as errors, not silent false negatives."""
+
+    @pytest.mark.asyncio
+    async def test_match_addresses_raises_on_internal_failure(self):
+        from app.matcher import AddressMatchingError
+
+        matcher = AddressMatcher({'use_geospatial': False, 'use_ml_model': False})
+        with patch.object(
+            matcher.parser,
+            'normalize_and_parse',
+            side_effect=RuntimeError('parser boom'),
+        ):
+            with pytest.raises(AddressMatchingError, match='internal error'):
+                await matcher.match_addresses(
+                    "123 Main St, Anytown, CA 90210",
+                    "123 Main Street, Anytown, CA 90210",
+                    region='US',
+                )
+
+
+class TestAddressLogRedaction:
+    """Address PII must be hashed in logs by default."""
+
+    def test_format_address_for_log_hashes_by_default(self, monkeypatch):
+        from app.logging_utils import format_address_for_log
+
+        monkeypatch.delenv('LOG_ADDRESS_PII', raising=False)
+        address = "123 Main St, Anytown, CA 90210"
+        token = format_address_for_log(address)
+        assert 'Main St' not in token
+        assert token.startswith('addr_sha256=')
+        assert 'len=30' in token
+
+    def test_format_address_for_log_allows_full_when_enabled(self, monkeypatch):
+        from app.logging_utils import format_address_for_log
+
+        monkeypatch.setenv('LOG_ADDRESS_PII', 'full')
+        address = "123 Main St, Anytown, CA 90210"
+        assert format_address_for_log(address) == address
+
+    def test_format_address_for_log_empty(self, monkeypatch):
+        from app.logging_utils import format_address_for_log
+
+        monkeypatch.delenv('LOG_ADDRESS_PII', raising=False)
+        assert format_address_for_log('') == '<empty>'
+        assert format_address_for_log(None) == '<empty>'
 
 
 if __name__ == "__main__":

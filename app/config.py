@@ -367,13 +367,19 @@ class AddressMatchingConfig:
     Enhanced configuration management for the address matching system with regional support.
     """
     
-    def __init__(self, config_file: Optional[str] = None, region: str = 'US'):
+    def __init__(
+        self,
+        config_file: Optional[str] = None,
+        region: str = 'US',
+        apply_env: bool = True,
+    ):
         """
         Initialize configuration.
         
         Args:
             config_file: Optional path to configuration file
             region: Default region for address matching
+            apply_env: Whether to merge environment variable overrides
         """
         self.region = region
         self.regional_config = RegionalConfig()
@@ -391,8 +397,19 @@ class AddressMatchingConfig:
         
         # Merge configurations (user config takes precedence)
         self.config = self._merge_configs()
+
+        # Environment overrides win over file/base config
+        if apply_env:
+            env_overrides = self.get_environment_specific_config()
+            if env_overrides:
+                self.config = self._deep_merge(self.config, env_overrides)
+                env_region = (
+                    env_overrides.get('system', {}).get('default_region')
+                )
+                if env_region and env_region != self.region:
+                    self.region = env_region
         
-        logger.info(f"Configuration initialized for region {region}")
+        logger.info(f"Configuration initialized for region {self.region}")
     
     def _load_base_config(self) -> Dict[str, Any]:
         """Load base system configuration."""
@@ -586,34 +603,160 @@ class AddressMatchingConfig:
         
         return errors
     
+    @staticmethod
+    def _env_bool(name: str) -> Optional[bool]:
+        """Parse a boolean environment variable if set."""
+        value = os.getenv(name)
+        if value is None:
+            return None
+        return value.strip().lower() in ('1', 'true', 'yes', 'on')
+
+    @staticmethod
+    def _env_float(name: str) -> Optional[float]:
+        """Parse a float environment variable if set."""
+        value = os.getenv(name)
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except ValueError:
+            logger.warning(f"Invalid float for {name}={value!r}, ignoring")
+            return None
+
+    @staticmethod
+    def _env_int(name: str) -> Optional[int]:
+        """Parse an int environment variable if set."""
+        value = os.getenv(name)
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except ValueError:
+            logger.warning(f"Invalid int for {name}={value!r}, ignoring")
+            return None
+
     def get_environment_specific_config(self) -> Dict[str, Any]:
         """Get configuration based on environment variables."""
-        env_config = {}
-        
-        # System environment variables
-        if os.getenv('ADDRESS_MATCHING_REGION'):
-            env_config['system'] = {'default_region': os.getenv('ADDRESS_MATCHING_REGION')}
-        
-        if os.getenv('ADDRESS_MATCHING_LOG_LEVEL'):
-            if 'system' not in env_config:
-                env_config['system'] = {}
-            env_config['system']['log_level'] = os.getenv('ADDRESS_MATCHING_LOG_LEVEL')
-        
-        # Component toggles
-        components_config = {}
-        if os.getenv('DISABLE_LIBPOSTAL') == '1':
-            components_config['use_libpostal'] = False
-        
+        env_config: Dict[str, Any] = {}
+        system_config: Dict[str, Any] = {}
+        components_config: Dict[str, Any] = {}
+        geocoding_config: Dict[str, Any] = {}
+        rules_config: Dict[str, Any] = {}
+        ml_config: Dict[str, Any] = {}
+
+        # System / API
+        region = os.getenv('ADDRESS_MATCHING_REGION')
+        if region:
+            system_config['default_region'] = region.upper()
+
+        log_level = os.getenv('ADDRESS_MATCHING_LOG_LEVEL') or os.getenv('LOG_LEVEL')
+        if log_level:
+            system_config['log_level'] = log_level.upper()
+
+        api_host = os.getenv('API_HOST')
+        if api_host:
+            system_config['api_host'] = api_host
+
+        api_port = self._env_int('API_PORT')
+        if api_port is not None:
+            system_config['api_port'] = api_port
+
+        # Component toggles (DISABLE_* wins over USE_*)
+        use_ml = self._env_bool('USE_ML_MODEL')
+        if use_ml is not None:
+            components_config['use_ml_model'] = use_ml
         if os.getenv('DISABLE_ML_MODEL') == '1':
             components_config['use_ml_model'] = False
-        
+
+        use_geo = self._env_bool('USE_GEOSPATIAL')
+        if use_geo is not None:
+            components_config['use_geospatial'] = use_geo
         if os.getenv('DISABLE_GEOSPATIAL') == '1':
             components_config['use_geospatial'] = False
-        
+
+        if os.getenv('DISABLE_LIBPOSTAL') == '1':
+            components_config['use_libpostal'] = False
+
+        # Geocoding
+        user_agent = os.getenv('GEOCODING_USER_AGENT')
+        if user_agent:
+            geocoding_config['user_agent'] = user_agent
+
+        geo_timeout = self._env_int('GEOCODING_TIMEOUT')
+        if geo_timeout is not None:
+            geocoding_config['timeout'] = geo_timeout
+
+        distance_threshold = self._env_float('DISTANCE_THRESHOLD')
+        if distance_threshold is not None:
+            geocoding_config['max_distance_threshold'] = distance_threshold
+
+        # Rule-based thresholds
+        threshold_env_map = {
+            'POSTAL_CODE_THRESHOLD': 'postal_code_threshold',
+            'STREET_THRESHOLD': 'street_threshold',
+            'CITY_THRESHOLD': 'city_threshold',
+            'HOUSE_NUMBER_THRESHOLD': 'house_number_threshold',
+            'OVERALL_THRESHOLD': 'overall_threshold',
+        }
+        for env_name, config_key in threshold_env_map.items():
+            value = self._env_float(env_name)
+            if value is not None:
+                rules_config[config_key] = value
+
+        require_map = {
+            'REQUIRE_POSTAL_CODE_MATCH': 'require_postal_code_match',
+            'REQUIRE_CITY_MATCH': 'require_city_match',
+            'REQUIRE_STREET_MATCH': 'require_street_match',
+        }
+        for env_name, config_key in require_map.items():
+            value = self._env_bool(env_name)
+            if value is not None:
+                rules_config[config_key] = value
+
+        # ML
+        ml_model_path = os.getenv('ML_MODEL_PATH')
+        if ml_model_path:
+            ml_config['model_path'] = ml_model_path
+
+        if system_config:
+            env_config['system'] = system_config
         if components_config:
             env_config['components'] = components_config
-        
+        if geocoding_config:
+            env_config['geocoding'] = geocoding_config
+        if rules_config:
+            env_config['rule_based_filter'] = rules_config
+        if ml_config:
+            env_config['ml_model'] = ml_config
+
         return env_config
+
+    def to_matcher_config(self) -> Dict[str, Any]:
+        """
+        Flatten nested config into the dict expected by AddressMatcher.
+        """
+        system = self.get_system_config()
+        components = self.config.get('components', {})
+        geocoding = self.get_component_config('geocoding')
+        rules = self.get_component_config('rule_based_filter')
+        ml = self.get_component_config('ml_model')
+
+        return {
+            'default_region': system.get('default_region', self.region),
+            'auto_detect_region': system.get('auto_detect_region', True),
+            'use_ml_model': components.get('use_ml_model', True),
+            'use_geospatial': components.get('use_geospatial', True),
+            'distance_threshold': geocoding.get('max_distance_threshold', 50.0),
+            'geocoding_user_agent': geocoding.get(
+                'user_agent', 'address-matching-service'
+            ),
+            'geocoding_timeout': geocoding.get('timeout', 10),
+            'ml_model_path': ml.get('model_path'),
+            'rules': rules,
+            'log_level': system.get('log_level', 'INFO'),
+            'api_host': system.get('api_host', '0.0.0.0'),
+            'api_port': system.get('api_port', 8000),
+        }
     
     def __str__(self) -> str:
         """String representation of configuration."""

@@ -1,9 +1,10 @@
-import os
 from typing import Optional, Tuple, Dict, Any
 from loguru import logger
 import time
 import asyncio
 from functools import lru_cache
+
+from app.logging_utils import format_address_for_log
 
 try:
     from geopy.geocoders import Nominatim
@@ -70,20 +71,32 @@ class GeocodingService:
             
             if result and result.latitude and result.longitude:
                 coords = (float(result.latitude), float(result.longitude))
-                logger.debug(f"Geocoded '{address}' to {coords}")
+                logger.debug(
+                    f"Geocoded '{format_address_for_log(address)}' to {coords}"
+                )
                 return coords
             else:
-                logger.debug(f"Could not geocode address: {address}")
+                logger.debug(
+                    f"Could not geocode address: {format_address_for_log(address)}"
+                )
                 return None
                 
         except GeocoderTimedOut:
-            logger.warning(f"Geocoding timeout for address: {address}")
+            logger.warning(
+                f"Geocoding timeout for address: {format_address_for_log(address)}"
+            )
             return None
         except GeocoderServiceError as e:
-            logger.warning(f"Geocoding service error for address '{address}': {e}")
+            logger.warning(
+                f"Geocoding service error for address "
+                f"'{format_address_for_log(address)}': {e}"
+            )
             return None
         except Exception as e:
-            logger.error(f"Unexpected error geocoding address '{address}': {e}")
+            logger.error(
+                f"Unexpected error geocoding address "
+                f"'{format_address_for_log(address)}': {e}"
+            )
             return None
     
     async def _rate_limit(self):
@@ -151,7 +164,11 @@ class GeocodingService:
         Returns:
             Distance in meters or None if geocoding fails
         """
-        logger.debug(f"Getting distance between '{address1}' and '{address2}'")
+        logger.debug(
+            "Getting distance between "
+            f"'{format_address_for_log(address1)}' and "
+            f"'{format_address_for_log(address2)}'"
+        )
         
         # Geocode both addresses
         coords1 = await self.geocode_address(address1)
