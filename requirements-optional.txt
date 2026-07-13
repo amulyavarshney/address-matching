@@ -1,0 +1,5 @@
+# Optional dependencies (require system libraries)
+# Install libpostal first, then:
+#   pip install -r requirements-optional.txt
+
+postal==1.1.10

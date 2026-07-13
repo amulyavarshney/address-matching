@@ -643,8 +643,11 @@ class TestPerformanceAndEdgeCases:
         
         assert 'address_parser' in status
         assert 'region_detection' in status
+        assert 'geopy' in status
+        assert 'ml_model_ready' in status
         assert status['address_parser'] is True
         assert status['region_detection'] is True
+        assert status['default_region'] == 'US'
     
     def test_supported_regions(self):
         """Test that all expected regions are supported."""

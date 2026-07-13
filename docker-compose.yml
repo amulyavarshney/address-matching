@@ -1,0 +1,14 @@
+services:
+  address-matching:
+    build: .
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      API_HOST: "0.0.0.0"
+      API_PORT: "8000"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      USE_ML_MODEL: "${USE_ML_MODEL:-true}"
+      USE_GEOSPATIAL: "${USE_GEOSPATIAL:-true}"
+      GEOCODING_USER_AGENT: "${GEOCODING_USER_AGENT:-address-matching-service}"
+      DISTANCE_THRESHOLD: "${DISTANCE_THRESHOLD:-50.0}"
+    restart: unless-stopped

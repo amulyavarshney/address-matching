@@ -33,6 +33,11 @@ cd address-matching
 pip install -r requirements.txt
 ```
 
+For development/tests:
+```bash
+pip install -r requirements-dev.txt
+```
+
 3. (Optional but Recommended) Install libpostal for enhanced address parsing:
 
 **On Ubuntu/Debian:**
@@ -86,31 +91,18 @@ python main.py
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-#### Option 2: Docker (Full Version with libpostal)
+#### Option 2: Docker
 ```bash
 # Build and run with Docker Compose
-docker-compose up address-matching
+docker compose up --build
 
-# Or build manually
+# Or build/run manually
 docker build -t address-matching .
 docker run -p 8000:8000 address-matching
 ```
 
-#### Option 3: Docker (Minimal Version without libpostal)
-```bash
-# Run minimal version (faster build, fallback parsing)
-docker-compose --profile minimal up address-matching-minimal
-
-# Or build manually
-docker build -f Dockerfile.minimal -t address-matching-minimal .
-docker run -p 8001:8000 address-matching-minimal
-```
-
-The API will be available at:
-- `http://localhost:8000` (full version)
-- `http://localhost:8001` (minimal version)
-
-View the interactive API documentation at `/docs` endpoint.
+The API will be available at `http://localhost:8000`.
+View the interactive API documentation at `/docs`.
 
 ## API Usage
 
@@ -197,7 +189,12 @@ print(f"Confidence: {result['confidence_score']}")
 
 **GET** `/health`
 
-Returns service health status.
+Liveness probe — returns `{"status": "healthy"}` when the process is up.
+
+**GET** `/health/ready`
+
+Readiness probe — reports component status. Returns HTTP 503 when enabled features
+(ML / geospatial) are unavailable.
 
 ## Configuration
 
@@ -308,18 +305,11 @@ pytest tests/ --cov=app --cov-report=html
 
 ### Docker Deployment
 
-```dockerfile
-FROM python:3.9-slim
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-COPY . .
-EXPOSE 8000
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```bash
+docker compose up --build -d
 ```
+
+See the root `Dockerfile` and `docker-compose.yml` for the production image (Python 3.12-slim, non-root user, healthcheck).
 
 ### Production Considerations
 
@@ -402,8 +392,8 @@ class MultiProviderGeocodingService(GeocodingService):
    - Consider using minimal version for faster startup
 
 5. **Docker build issues**:
-   - Use `Dockerfile.minimal` for faster builds without libpostal
-   - Ensure sufficient disk space for libpostal compilation
+   - Ensure Docker has network access to install pinned PyPI packages
+   - Copy `.env.example` to `.env` and adjust settings as needed
 
 ### Debug Mode
 

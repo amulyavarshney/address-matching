@@ -436,20 +436,31 @@ class AddressMatcher:
         
         logger.info(f"AddressMatcher configuration updated: {list(new_config.keys())}")
     
-    def get_component_status(self) -> Dict[str, bool]:
+    def get_component_status(self) -> Dict[str, Any]:
         """
         Get the status of all matching components.
         
         Returns:
-            Dictionary with component names and their availability status
+            Dictionary with component availability and configuration flags
         """
+        ml_ready = bool(
+            self.ml_model
+            and self.use_ml_model
+            and getattr(self.ml_model, 'sklearn_available', False)
+            and getattr(self.ml_model, 'is_trained', False)
+        )
         return {
-            'address_parser': True,  # Always available
-            'fuzzy_matcher': self.fuzzy_matcher is not None,
-            'rule_based_filter': self.rule_filter is not None,
-            'geocoding_service': True,  # Always available (with fallbacks)
-            'ml_model': self.ml_model is not None and self.use_ml_model,
-            'region_detection': True,  # Always available
+            'address_parser': True,
+            'libpostal': bool(getattr(self.parser, 'postal_available', False)),
+            'region_detection': True,
+            'geopy': bool(getattr(self.geocoding_service, 'geopy_available', False)),
+            'geospatial_enabled': self.use_geospatial,
+            'sklearn': bool(
+                self.ml_model and getattr(self.ml_model, 'sklearn_available', False)
+            ),
+            'ml_model_enabled': self.use_ml_model,
+            'ml_model_ready': ml_ready,
+            'default_region': self.default_region,
         }
     
     async def batch_match_addresses(self, address_pairs: list[tuple[str, str]], region: Optional[str] = None) -> list[AddressMatchResponse]:

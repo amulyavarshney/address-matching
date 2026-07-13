@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from loguru import logger
@@ -55,7 +55,37 @@ async def root():
 
 @app.get("/health")
 async def health():
+    """Liveness probe — process is up."""
     return {"status": "healthy"}
+
+@app.get("/health/ready")
+async def health_ready(response: Response):
+    """
+    Readiness probe — core components are usable.
+    Returns 503 if required features are enabled but unavailable.
+    """
+    components = matcher.get_component_status()
+    checks = {
+        "address_parser": components.get("address_parser", False),
+        "region_detection": components.get("region_detection", False),
+    }
+    issues = []
+
+    if components.get("geospatial_enabled") and not components.get("geopy"):
+        issues.append("geospatial enabled but geopy unavailable")
+    if components.get("ml_model_enabled") and not components.get("ml_model_ready"):
+        issues.append("ml model enabled but not ready")
+
+    ready = all(checks.values()) and not issues
+    payload = {
+        "status": "ready" if ready else "not_ready",
+        "checks": checks,
+        "components": components,
+        "issues": issues,
+    }
+    if not ready:
+        response.status_code = 503
+    return payload
 
 @app.post("/match-addresses", response_model=AddressMatchResponse)
 async def match_addresses(request: AddressMatchRequest):

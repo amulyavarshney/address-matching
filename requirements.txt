@@ -1,28 +1,20 @@
-# Core API dependencies
-fastapi
-uvicorn
-pydantic
+# Production dependencies (pinned for reproducible installs)
 
-# String matching and fuzzy logic
-rapidfuzz
+# Core API
+fastapi==0.115.12
+uvicorn==0.34.0
+pydantic==2.11.2
 
-# Geospatial and geocoding
-geopy
+# String matching
+rapidfuzz==3.14.3
+
+# Geospatial / geocoding
+geopy==2.5.0
 
 # Machine learning
-scikit-learn
-numpy
-pandas
+scikit-learn==1.9.0
+numpy==2.5.1
 
 # Utilities
-python-multipart
-httpx
-python-dotenv
-loguru
-
-# Development and testing
-pytest
-pytest-asyncio
-
-# Optional: Address parsing (requires libpostal system library)
-# postal
+python-dotenv==1.1.0
+loguru==0.7.3
