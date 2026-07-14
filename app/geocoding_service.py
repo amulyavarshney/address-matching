@@ -9,8 +9,12 @@ from app.geocoders import (
     GEOPY_AVAILABLE,
     GeocodeProvider,
     build_provider,
+    resolve_geocoding_api_key,
     GeocoderTimedOut,
     GeocoderServiceError,
+    GeocoderAuthenticationFailure,
+    GeocoderInsufficientPrivileges,
+    GeocoderQuotaExceeded,
 )
 
 try:
@@ -37,7 +41,10 @@ class GeocodingService:
         provider: str = "nominatim",
         enabled: bool = True,
         api_key: Optional[str] = None,
-        min_request_interval: float = 1.0,
+        min_request_interval: Optional[float] = None,
+        region: Optional[str] = None,
+        language: Optional[str] = None,
+        country: Optional[str] = None,
     ):
         self.user_agent = user_agent
         self.timeout = timeout
@@ -47,14 +54,20 @@ class GeocodingService:
             "off",
             "disabled",
         }
-        self.api_key = api_key
+        self.api_key = resolve_geocoding_api_key(self.provider_name, api_key)
+        self.region = region
+        self.language = language
+        self.country = country
 
         if self.enabled:
             self._provider: GeocodeProvider = build_provider(
                 self.provider_name,
                 user_agent=user_agent,
                 timeout=timeout,
-                api_key=api_key,
+                api_key=self.api_key,
+                region=region,
+                language=language,
+                country=country,
             )
         else:
             self._provider = build_provider("none")
@@ -71,11 +84,13 @@ class GeocodingService:
                 self.enabled,
             )
 
-        # Nominatim needs polite spacing; commercial APIs can be faster
-        if self.provider_name == "nominatim":
-            self.min_request_interval = max(1.0, float(min_request_interval))
-        else:
+        # Nominatim needs polite spacing; commercial APIs default to no delay
+        if min_request_interval is not None:
             self.min_request_interval = max(0.0, float(min_request_interval))
+        elif self.provider_name == "nominatim":
+            self.min_request_interval = 1.0
+        else:
+            self.min_request_interval = 0.0
 
         self.last_request_time = 0.0
         self._rate_lock: Optional[asyncio.Lock] = None
@@ -103,6 +118,16 @@ class GeocodingService:
                 return coords
             logger.debug(
                 f"Could not geocode address: {format_address_for_log(address)}"
+            )
+            return None
+        except (
+            GeocoderAuthenticationFailure,
+            GeocoderInsufficientPrivileges,
+            GeocoderQuotaExceeded,
+        ) as e:
+            logger.error(
+                "Geocoding provider auth/quota failure "
+                f"({self._provider.name}): {e}"
             )
             return None
         except GeocoderTimedOut:

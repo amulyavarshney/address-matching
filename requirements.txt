@@ -18,3 +18,6 @@ numpy==2.5.1
 # Utilities
 python-dotenv==1.1.0
 loguru==0.7.3
+
+# Multi-instance rate limiting (used by docker-compose Redis backend)
+redis==5.2.1

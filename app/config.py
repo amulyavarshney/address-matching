@@ -362,13 +362,40 @@ class AddressMatchingConfig:
         if geo_provider:
             geocoding_config['provider'] = geo_provider.strip().lower()
 
+        provider_name = geocoding_config.get('provider', 'nominatim')
         geo_api_key = (
             os.getenv('GEOCODING_API_KEY')
+            or os.getenv('GOOGLE_MAPS_API_KEY')
             or os.getenv('GOOGLE_GEOCODING_API_KEY')
             or os.getenv('MAPBOX_ACCESS_TOKEN')
         )
+        # Prefer provider-specific keys when set
+        if provider_name == 'google':
+            geo_api_key = (
+                os.getenv('GOOGLE_MAPS_API_KEY')
+                or os.getenv('GOOGLE_GEOCODING_API_KEY')
+                or os.getenv('GEOCODING_API_KEY')
+            )
+        elif provider_name == 'mapbox':
+            geo_api_key = (
+                os.getenv('MAPBOX_ACCESS_TOKEN')
+                or os.getenv('GEOCODING_API_KEY')
+            )
         if geo_api_key:
             geocoding_config['api_key'] = geo_api_key
+
+        geo_region = os.getenv('GEOCODING_REGION')
+        if geo_region:
+            geocoding_config['region'] = geo_region.strip().lower()
+        geo_language = os.getenv('GEOCODING_LANGUAGE')
+        if geo_language:
+            geocoding_config['language'] = geo_language.strip()
+        geo_country = os.getenv('GEOCODING_COUNTRY')
+        if geo_country:
+            geocoding_config['country'] = geo_country.strip().upper()
+        geo_min_interval = self._env_float('GEOCODING_MIN_INTERVAL')
+        if geo_min_interval is not None:
+            geocoding_config['min_request_interval'] = geo_min_interval
 
         # Component toggles (DISABLE_* wins over USE_*)
         use_ml = self._env_bool('USE_ML_MODEL')
@@ -468,6 +495,10 @@ class AddressMatchingConfig:
             'geocoding_timeout': geocoding.get('timeout', 10),
             'geocoding_provider': geocoding.get('provider', 'nominatim'),
             'geocoding_api_key': geocoding.get('api_key'),
+            'geocoding_region': geocoding.get('region'),
+            'geocoding_language': geocoding.get('language'),
+            'geocoding_country': geocoding.get('country'),
+            'geocoding_min_request_interval': geocoding.get('min_request_interval'),
             'ml_model_path': ml.get('model_path'),
             'ml_auto_train': ml.get('auto_train', False),
             # Global threshold overrides only — never full regional templates

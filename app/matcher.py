@@ -34,6 +34,10 @@ class AddressMatcher:
             provider=self.config.get('geocoding_provider', 'nominatim'),
             enabled=bool(self.config.get('use_geospatial', True)),
             api_key=self.config.get('geocoding_api_key'),
+            min_request_interval=self.config.get('geocoding_min_request_interval'),
+            region=self.config.get('geocoding_region'),
+            language=self.config.get('geocoding_language'),
+            country=self.config.get('geocoding_country'),
         )
         self.ml_model = AddressMatchingMLModel(
             model_path=self.config.get('ml_model_path'),

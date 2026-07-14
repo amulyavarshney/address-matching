@@ -1,11 +1,14 @@
 # Optional dependencies
 # Install as needed:
 #   pip install -r requirements-optional.txt
+#
+# Note: redis is also pinned in requirements.txt (needed for docker-compose
+# RATE_LIMIT_BACKEND=redis).
 
 # libpostal Python bindings (requires system libpostal)
 postal==1.1.10
 
-# Redis-backed rate limiting (multi-instance)
+# Multi-instance rate limiting (also pinned in requirements.txt for Docker)
 redis==5.2.1
 
 # OpenTelemetry tracing

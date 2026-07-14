@@ -1,9 +1,31 @@
 address1,address2,match,region,geospatial_distance_meters
 "123 Main Street, Anytown, CA 90210, USA","123 Main St, Anytown, California 90210, United States",1,US,12
-"10 Downing Street, London SW1A 2AA, UK","10 Downing St, London SW1A2AA, United Kingdom",1,UK,8
-"Musterstraße 123, 12345 Berlin, Deutschland","Muster Str 123, 12345 Berlin, Germany",1,DE,5
-"Flat 2B, Krishna Nagar, Mumbai 400001, India","2-B Krishna Ngr, Bombay 400001, India",1,IN,
-"123 Main Street, Anytown, CA 90210, USA","10 Downing Street, London SW1A 2AA, UK",0,US,
+"123 Main Street Apt 4B, Anytown, CA 90210","123 Main St #4B, Anytown, CA 90210",1,US,5
+"123 Main Street, Anytown, CA 90210, USA","125 Main Street, Anytown, CA 90210, USA",0,US,45
+"1600 Amphitheatre Parkway, Mountain View, CA 94043","1600 Amphitheatre Pkwy, Mountain View, California 94043",1,US,8
 "1 Infinite Loop, Cupertino, CA 95014","1600 Amphitheatre Parkway, Mountain View, CA 94043",0,US,15000
-"221B Baker Street, London NW1 6XE","221B Baker St, London NW1 6XE, UK",1,UK,3
+"350 Fifth Avenue, New York, NY 10118","Empire State Building, 350 5th Ave, New York, NY 10118",1,US,20
+"221B Baker Street, London NW1 6XE, UK","221B Baker St, London NW1 6XE, United Kingdom",1,UK,3
+"10 Downing Street, London SW1A 2AA, UK","10 Downing St, London SW1A2AA, United Kingdom",1,UK,8
+"221B Baker Street, London NW1 6XE","10 Downing Street, London SW1A 2AA, UK",0,UK,3200
+"Flat 12, 48 Commercial Street, London E1 6LT","12/48 Commercial St, London E1 6LT, UK",1,UK,15
+"Musterstraße 123, 12345 Berlin, Deutschland","Muster Str 123, 12345 Berlin, Germany",1,DE,5
+"Hauptstraße 45, 80331 München","Hauptstr. 45, 80331 Munich, Germany",1,DE,10
 "Hauptstraße 45, 80331 München","Somewhere Else 9, 10115 Berlin",0,DE,500000
+"Friedrichstraße 100, 10117 Berlin","Friedrichstr 100, Berlin 10117",1,DE,7
+"Flat 2B, Krishna Nagar, Mumbai 400001, India","2-B Krishna Ngr, Bombay 400001, India",1,IN,
+"12 MG Road, Bengaluru 560001, Karnataka","12 M.G. Rd, Bangalore 560001, India",1,IN,25
+"12 MG Road, Bengaluru 560001","45 Linking Road, Mumbai 400050",0,IN,980000
+"B-42 Sector 62, Noida 201301, UP","B 42, Sector-62, Noida, Uttar Pradesh 201301",1,IN,18
+"100 Queen Street West, Toronto, ON M5H 2N2","100 Queen St W, Toronto, Ontario M5H 2N2, Canada",1,CA,9
+"100 Queen Street West, Toronto, ON","200 Bay Street, Toronto, ON M5J 2J2",0,CA,1200
+"42 Wallaby Way, Sydney NSW 2000, Australia","42 Wallaby Way, Sydney, New South Wales 2000",1,AU,6
+"1 Macquarie Street, Sydney NSW 2000","1 Collins Street, Melbourne VIC 3000",0,AU,713000
+"10 Rue de Rivoli, 75001 Paris, France","10 rue de Rivoli, Paris 75001, France",1,FR,4
+"10 Rue de Rivoli, 75001 Paris","5 Avenue des Champs-Élysées, 75008 Paris",0,FR,3500
+"Via del Corso 1, 00186 Roma, Italia","Via Del Corso 1, Rome 00186, Italy",1,IT,11
+"Plaza Mayor 1, 28012 Madrid, España","Plaza Mayor 1, Madrid 28012, Spain",1,ES,8
+"123 Main Street, Anytown, CA 90210, USA","10 Downing Street, London SW1A 2AA, UK",0,US,
+"456 Oak Avenue Suite 200, Austin TX 78701","456 Oak Ave Ste 200, Austin, Texas 78701",1,US,14
+"PO Box 100, Springfield IL 62701","P.O. Box 100, Springfield, Illinois 62701",1,US,
+"7 Ban Street, Tokyo 100-0001, Japan","7 Ban St, Chiyoda, Tokyo 100-0001",1,JP,22

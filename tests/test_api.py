@@ -260,6 +260,80 @@ def test_google_provider_requires_api_key():
     assert provider.name == "google"
 
 
+def test_mapbox_provider_requires_api_key():
+    from app.geocoders import build_provider
+
+    provider = build_provider("mapbox", api_key=None)
+    assert provider.available is False
+    assert provider.name == "mapbox"
+
+
+def test_resolve_geocoding_api_key_prefers_provider_env(monkeypatch):
+    from app.geocoders import resolve_geocoding_api_key
+
+    monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "google-key")
+    monkeypatch.setenv("MAPBOX_ACCESS_TOKEN", "mapbox-key")
+    monkeypatch.setenv("GEOCODING_API_KEY", "generic-key")
+
+    assert resolve_geocoding_api_key("google") == "google-key"
+    assert resolve_geocoding_api_key("mapbox") == "mapbox-key"
+    assert resolve_geocoding_api_key("google", "explicit") == "explicit"
+
+
+def test_google_provider_geocode_with_mock(monkeypatch):
+    from app import geocoders
+
+    class FakeLocation:
+        latitude = 37.42
+        longitude = -122.08
+
+    class FakeGoogle:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def geocode(self, address, **kwargs):
+            assert kwargs.get("exactly_one") is True
+            return FakeLocation()
+
+    monkeypatch.setattr(geocoders, "GEOPY_AVAILABLE", True)
+    monkeypatch.setattr(geocoders, "GoogleV3", FakeGoogle)
+
+    provider = geocoders.GoogleProvider(api_key="test-key")
+    assert provider.available is True
+    assert provider.geocode("1600 Amphitheatre Parkway") == (37.42, -122.08)
+
+
+def test_mapbox_provider_geocode_with_mock(monkeypatch):
+    from app import geocoders
+
+    class FakeLocation:
+        latitude = 51.5
+        longitude = -0.12
+
+    class FakeMapbox:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def geocode(self, address, **kwargs):
+            assert kwargs.get("exactly_one") is True
+            assert kwargs.get("country") == "GB"
+            return FakeLocation()
+
+    monkeypatch.setattr(geocoders, "GEOPY_AVAILABLE", True)
+    monkeypatch.setattr(geocoders, "MapBox", FakeMapbox)
+
+    provider = geocoders.MapboxProvider(api_key="mb-key", country="GB")
+    assert provider.available is True
+    assert provider.geocode("10 Downing Street") == (51.5, -0.12)
+
+
+def test_commercial_geocoding_default_no_delay():
+    from app.geocoding_service import GeocodingService
+
+    service = GeocodingService(provider="google", api_key=None, enabled=True)
+    assert service.min_request_interval == 0.0
+
+
 def test_none_geocoding_provider():
     from app.geocoding_service import GeocodingService
 

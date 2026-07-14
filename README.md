@@ -120,13 +120,19 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 #### Option 2: Docker
 ```bash
-# Build and run with Docker Compose
+# Build and run with Docker Compose (includes Redis for shared rate limits)
 docker compose up --build
 
-# Or build/run manually
+# Or build/run the API image alone (in-memory rate limiting unless REDIS_URL is set)
 docker build -t address-matching .
-docker run -p 8000:8000 address-matching
+docker run -p 8000:8000 -e RATE_LIMIT_BACKEND=memory address-matching
 ```
+
+Compose starts:
+- `redis` — shared rate-limit backend (`RATE_LIMIT_BACKEND=redis` by default)
+- `address-matching` — API on port 8000
+
+Pass geocoding keys via env, e.g. `GOOGLE_MAPS_API_KEY=... docker compose up`.
 
 The API will be available at `http://localhost:8000`.
 View the interactive API documentation at `/docs`.
@@ -398,7 +404,7 @@ pytest tests/ --cov=app --cov-report=html
 docker compose up --build -d
 ```
 
-See the root `Dockerfile` and `docker-compose.yml` for the production image (Python 3.12-slim, non-root user, healthcheck).
+See the root `Dockerfile` and `docker-compose.yml` for the production image (Python 3.12-slim, non-root user, healthcheck) plus a Redis service used for shared API rate limiting.
 
 ### Production Considerations
 

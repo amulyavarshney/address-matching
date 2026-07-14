@@ -1,4 +1,15 @@
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   address-matching:
     build: .
     ports:
@@ -9,6 +20,21 @@ services:
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
       USE_ML_MODEL: "${USE_ML_MODEL:-true}"
       USE_GEOSPATIAL: "${USE_GEOSPATIAL:-true}"
+      ML_AUTO_TRAIN: "${ML_AUTO_TRAIN:-false}"
       GEOCODING_USER_AGENT: "${GEOCODING_USER_AGENT:-address-matching-service}"
+      GEOCODING_TIMEOUT: "${GEOCODING_TIMEOUT:-10}"
+      GEOCODING_PROVIDER: "${GEOCODING_PROVIDER:-nominatim}"
+      GEOCODING_API_KEY: "${GEOCODING_API_KEY:-}"
+      GOOGLE_MAPS_API_KEY: "${GOOGLE_MAPS_API_KEY:-}"
+      MAPBOX_ACCESS_TOKEN: "${MAPBOX_ACCESS_TOKEN:-}"
       DISTANCE_THRESHOLD: "${DISTANCE_THRESHOLD:-50.0}"
+      API_KEY: "${API_KEY:-}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-*}"
+      RATE_LIMITING: "${RATE_LIMITING:-true}"
+      MAX_REQUESTS_PER_MINUTE: "${MAX_REQUESTS_PER_MINUTE:-60}"
+      RATE_LIMIT_BACKEND: "${RATE_LIMIT_BACKEND:-redis}"
+      REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
