@@ -16,11 +16,12 @@ A comprehensive RESTful microservice for address matching that incorporates addr
 ## Library usage
 
 ```python
-from app import create_matcher
+from app import create_matcher, RegionRegistry
 
 matcher = create_matcher({
     "use_ml_model": False,
     "use_geospatial": False,
+    "geocoding_provider": "none",
     "default_region": "US",
 })
 
@@ -30,10 +31,14 @@ result = await matcher.match_addresses(
     region="US",
 )
 print(result.match, result.confidence_score)
+print(RegionRegistry.supported_regions())
 ```
 
 `create_matcher(..., apply_env=False)` is the default for deterministic embedding.
 Use `create_app()` only when running the HTTP service (`main.py` / `run.py`).
+
+Regional weights and rule thresholds live in `app/regions.py` (`RegionRegistry`) —
+the single source of truth for all 13 regions.
 
 ## Quick Start
 

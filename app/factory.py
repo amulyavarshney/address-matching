@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from app.auth import APIKeyMiddleware
+from app.rate_limit import RateLimitMiddleware
 from app.config import AddressMatchingConfig
 from app.logging_utils import format_address_for_log
 from app.matcher import AddressMatcher, AddressMatchingError
@@ -87,6 +88,11 @@ def create_app(
         allow_headers=["*"],
     )
     app.add_middleware(APIKeyMiddleware, api_key=api_settings.get("api_key"))
+    app.add_middleware(
+        RateLimitMiddleware,
+        enabled=bool(api_settings.get("rate_limiting", True)),
+        max_requests_per_minute=int(api_settings.get("max_requests_per_minute", 60)),
+    )
 
     matcher = AddressMatcher(matcher_config)
     app.state.matcher = matcher

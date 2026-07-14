@@ -2,6 +2,7 @@
 
 from app.matcher import AddressMatcher, AddressMatchingError
 from app.config import AddressMatchingConfig, RegionalConfig
+from app.regions import RegionRegistry
 from app.models import (
     AddressMatchRequest,
     AddressMatchResponse,
@@ -18,6 +19,7 @@ __all__ = [
     "AddressMatchingError",
     "AddressMatchingConfig",
     "RegionalConfig",
+    "RegionRegistry",
     "AddressMatchRequest",
     "AddressMatchResponse",
     "BatchAddressMatchRequest",
@@ -29,4 +31,4 @@ __all__ = [
     "create_matcher",
 ]
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"

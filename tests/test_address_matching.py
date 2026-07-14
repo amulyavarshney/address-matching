@@ -483,8 +483,8 @@ class TestRegionalConfiguration:
         assert matcher_config['geocoding_user_agent'] == 'test-agent'
         assert matcher_config['geocoding_timeout'] == 15
         assert matcher_config['ml_model_path'] == '/tmp/model.pkl'
-        assert matcher_config['rules']['overall_threshold'] == 0.85
-        assert matcher_config['rules']['require_city_match'] is False
+        assert matcher_config['rule_overrides']['overall_threshold'] == 0.85
+        assert matcher_config['rule_overrides']['require_city_match'] is False
         assert matcher_config['api_host'] == '127.0.0.1'
         assert matcher_config['api_port'] == 9000
         assert matcher_config['log_level'] == 'DEBUG'

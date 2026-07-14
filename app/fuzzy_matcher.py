@@ -112,119 +112,12 @@ class TransliterationMatcher:
 
 
 class RegionAwareWeights:
-    """Region-specific component weights for address matching."""
-    
-    REGIONAL_WEIGHTS = {
-        'US': {
-            'house_number': 0.25,
-            'street': 0.30,
-            'city': 0.20,
-            'postal_code': 0.20,
-            'state': 0.05,
-            'country': 0.00
-        },
-        'CA': {
-            'house_number': 0.25,
-            'street': 0.30,
-            'city': 0.20,
-            'postal_code': 0.20,
-            'state': 0.05,
-            'country': 0.00
-        },
-        'UK': {
-            'house_number': 0.20,
-            'street': 0.35,
-            'city': 0.25,
-            'postal_code': 0.15,
-            'state': 0.05,
-            'country': 0.00
-        },
-        'DE': {
-            'house_number': 0.30,
-            'street': 0.35,
-            'city': 0.20,
-            'postal_code': 0.15,
-            'state': 0.00,
-            'country': 0.00
-        },
-        'FR': {
-            'house_number': 0.25,
-            'street': 0.35,
-            'city': 0.25,
-            'postal_code': 0.15,
-            'state': 0.00,
-            'country': 0.00
-        },
-        'IT': {
-            'house_number': 0.25,
-            'street': 0.35,
-            'city': 0.25,
-            'postal_code': 0.15,
-            'state': 0.00,
-            'country': 0.00
-        },
-        'ES': {
-            'house_number': 0.25,
-            'street': 0.35,
-            'city': 0.25,
-            'postal_code': 0.15,
-            'state': 0.00,
-            'country': 0.00
-        },
-        'IN': {
-            'house_number': 0.15,  # Less reliable in Indian addresses
-            'street': 0.25,
-            'city': 0.30,  # More important for Indian addresses
-            'postal_code': 0.25,  # Pincode is very important
-            'state': 0.05,
-            'country': 0.00
-        },
-        'AU': {
-            'house_number': 0.25,
-            'street': 0.30,
-            'city': 0.20,
-            'postal_code': 0.20,
-            'state': 0.05,
-            'country': 0.00
-        },
-        'NL': {
-            'house_number': 0.30,  # Very important in Dutch addresses
-            'street': 0.35,
-            'city': 0.20,
-            'postal_code': 0.15,
-            'state': 0.00,
-            'country': 0.00
-        },
-        'SE': {
-            'house_number': 0.25,
-            'street': 0.35,
-            'city': 0.25,
-            'postal_code': 0.15,
-            'state': 0.00,
-            'country': 0.00
-        },
-        'NO': {
-            'house_number': 0.25,
-            'street': 0.35,
-            'city': 0.25,
-            'postal_code': 0.15,
-            'state': 0.00,
-            'country': 0.00
-        },
-        'CH': {
-            'house_number': 0.30,
-            'street': 0.35,
-            'city': 0.20,
-            'postal_code': 0.15,
-            'state': 0.00,
-            'country': 0.00
-        }
-    }
-    
+    """Region-specific component weights (delegates to RegionRegistry)."""
+
     @classmethod
     def get_weights(cls, region: str) -> Dict[str, float]:
-        """Get region-specific weights."""
-        return cls.REGIONAL_WEIGHTS.get(region, cls.REGIONAL_WEIGHTS['US'])
+        from app.regions import RegionRegistry
+        return RegionRegistry.get_weights(region)
 
 
 class FuzzyMatcher:
@@ -232,15 +125,20 @@ class FuzzyMatcher:
     Enhanced fuzzy string matching for international address components.
     """
     
-    def __init__(self, region: str = 'US'):
+    def __init__(self, region: str = 'US', weights: Optional[Dict[str, float]] = None):
         self.rapidfuzz_available = RAPIDFUZZ_AVAILABLE
         self.region = region
         self.transliteration_matcher = TransliterationMatcher()
-        self.region_weights = RegionAwareWeights()
+        self._weights_override = weights
         
     def set_region(self, region: str):
         """Set the region for region-specific matching."""
         self.region = region
+
+    def _weights_for(self, region: str) -> Dict[str, float]:
+        if self._weights_override:
+            return self._weights_override
+        return RegionAwareWeights.get_weights(region)
         
     def compute_component_similarities(
         self, 
@@ -539,7 +437,7 @@ class FuzzyMatcher:
         use_region = region or self.region
         
         # Get region-specific weights
-        weights = self.region_weights.get_weights(use_region)
+        weights = self._weights_for(use_region)
         
         total_weight = 0.0
         weighted_sum = 0.0

@@ -31,6 +31,8 @@ class AddressMatcher:
                 'geocoding_user_agent', 'address-matching-service'
             ),
             timeout=int(self.config.get('geocoding_timeout', 10)),
+            provider=self.config.get('geocoding_provider', 'nominatim'),
+            enabled=bool(self.config.get('use_geospatial', True)),
         )
         self.ml_model = AddressMatchingMLModel(
             model_path=self.config.get('ml_model_path'),
@@ -51,7 +53,7 @@ class AddressMatcher:
         self, region: str
     ) -> Tuple[FuzzyMatcher, RuleBasedFilter]:
         """Build region-specific components for a single match call (thread-safe)."""
-        rule_config = dict(self.config.get('rules', {}) or {})
+        rule_config = dict(self.config.get('rule_overrides', {}) or {})
         if region in self.region_thresholds:
             rule_config.update(self.region_thresholds[region])
         return (
@@ -417,7 +419,5 @@ class AddressMatcher:
         logger.info(f"Updated thresholds for region {region}: {thresholds}")
 
     def get_supported_regions(self) -> list[str]:
-        return [
-            'US', 'CA', 'UK', 'DE', 'FR', 'IT', 'ES', 'IN',
-            'AU', 'NL', 'SE', 'NO', 'CH',
-        ]
+        from app.regions import RegionRegistry
+        return RegionRegistry.supported_regions()

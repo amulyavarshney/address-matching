@@ -5,163 +5,12 @@ from app.models import ComponentSimilarities, NormalizedAddress
 
 
 class RegionSpecificRules:
-    """Region-specific rules and thresholds for address matching."""
-    
-    REGIONAL_CONFIGS = {
-        'US': {
-            'postal_code_threshold': 0.9,
-            'street_threshold': 0.7,
-            'city_threshold': 0.7,  # Lowered to handle common abbreviations like NYC
-            'house_number_threshold': 0.8,
-            'overall_threshold': 0.7,
-            'require_postal_code_match': False,
-            'require_city_match': True,
-            'require_street_match': True,
-            'allow_partial_house_number': True,
-            'state_abbreviation_matching': True,
-        },
-        'CA': {
-            'postal_code_threshold': 0.9,
-            'street_threshold': 0.7,
-            'city_threshold': 0.8,
-            'house_number_threshold': 0.8,
-            'overall_threshold': 0.7,
-            'require_postal_code_match': False,
-            'require_city_match': True,
-            'require_street_match': True,
-            'allow_partial_house_number': True,
-            'state_abbreviation_matching': True,
-        },
-        'UK': {
-            'postal_code_threshold': 0.8,  # More flexible for UK postcodes
-            'street_threshold': 0.75,
-            'city_threshold': 0.8,
-            'house_number_threshold': 0.7,  # More flexible for house names
-            'overall_threshold': 0.7,
-            'require_postal_code_match': False,
-            'require_city_match': True,
-            'require_street_match': True,
-            'allow_partial_house_number': True,
-            'allow_house_names': True,
-        },
-        'DE': {
-            'postal_code_threshold': 0.9,
-            'street_threshold': 0.8,
-            'city_threshold': 0.8,
-            'house_number_threshold': 0.9,  # German addresses very precise
-            'overall_threshold': 0.75,
-            'require_postal_code_match': True,  # PLZ important
-            'require_city_match': True,
-            'require_street_match': True,
-            'allow_partial_house_number': False,
-        },
-        'FR': {
-            'postal_code_threshold': 0.9,
-            'street_threshold': 0.75,
-            'city_threshold': 0.8,
-            'house_number_threshold': 0.8,
-            'overall_threshold': 0.7,
-            'require_postal_code_match': False,
-            'require_city_match': True,
-            'require_street_match': True,
-            'allow_partial_house_number': True,
-        },
-        'IT': {
-            'postal_code_threshold': 0.9,
-            'street_threshold': 0.75,
-            'city_threshold': 0.8,
-            'house_number_threshold': 0.8,
-            'overall_threshold': 0.7,
-            'require_postal_code_match': False,
-            'require_city_match': True,
-            'require_street_match': True,
-            'allow_partial_house_number': True,
-        },
-        'ES': {
-            'postal_code_threshold': 0.9,
-            'street_threshold': 0.75,
-            'city_threshold': 0.8,
-            'house_number_threshold': 0.8,
-            'overall_threshold': 0.7,
-            'require_postal_code_match': False,
-            'require_city_match': True,
-            'require_street_match': True,
-            'allow_partial_house_number': True,
-        },
-        'IN': {
-            'postal_code_threshold': 0.9,  # Pincode very important
-            'street_threshold': 0.6,  # More flexible for complex Indian addresses
-            'city_threshold': 0.7,  # More flexible for city name variations
-            'house_number_threshold': 0.6,  # Indian house numbers can be complex
-            'overall_threshold': 0.65,  # Lower overall threshold
-            'require_postal_code_match': True,  # Pincode critical
-            'require_city_match': True,
-            'require_street_match': False,  # Street info often inconsistent
-            'allow_partial_house_number': True,
-            'allow_area_locality_matching': True,  # Indian addresses have areas/localities
-        },
-        'AU': {
-            'postal_code_threshold': 0.9,
-            'street_threshold': 0.75,
-            'city_threshold': 0.8,
-            'house_number_threshold': 0.8,
-            'overall_threshold': 0.7,
-            'require_postal_code_match': False,
-            'require_city_match': True,
-            'require_street_match': True,
-            'allow_partial_house_number': True,
-            'state_abbreviation_matching': True,
-        },
-        'NL': {
-            'postal_code_threshold': 0.9,
-            'street_threshold': 0.8,
-            'city_threshold': 0.8,
-            'house_number_threshold': 0.9,  # Very important in Dutch addresses
-            'overall_threshold': 0.75,
-            'require_postal_code_match': True,
-            'require_city_match': True,
-            'require_street_match': True,
-            'allow_partial_house_number': False,
-        },
-        'SE': {
-            'postal_code_threshold': 0.9,
-            'street_threshold': 0.75,
-            'city_threshold': 0.8,
-            'house_number_threshold': 0.8,
-            'overall_threshold': 0.7,
-            'require_postal_code_match': False,
-            'require_city_match': True,
-            'require_street_match': True,
-            'allow_partial_house_number': True,
-        },
-        'NO': {
-            'postal_code_threshold': 0.9,
-            'street_threshold': 0.75,
-            'city_threshold': 0.8,
-            'house_number_threshold': 0.8,
-            'overall_threshold': 0.7,
-            'require_postal_code_match': False,
-            'require_city_match': True,
-            'require_street_match': True,
-            'allow_partial_house_number': True,
-        },
-        'CH': {
-            'postal_code_threshold': 0.9,
-            'street_threshold': 0.8,
-            'city_threshold': 0.8,
-            'house_number_threshold': 0.9,
-            'overall_threshold': 0.75,
-            'require_postal_code_match': True,
-            'require_city_match': True,
-            'require_street_match': True,
-            'allow_partial_house_number': False,
-        },
-    }
-    
+    """Region-specific rules (delegates to RegionRegistry)."""
+
     @classmethod
     def get_config(cls, region: str) -> Dict[str, Any]:
-        """Get region-specific configuration."""
-        return cls.REGIONAL_CONFIGS.get(region, cls.REGIONAL_CONFIGS['US'])
+        from app.regions import RegionRegistry
+        return RegionRegistry.get_rules(region)
 
 
 class RuleBasedFilter:
@@ -174,48 +23,41 @@ class RuleBasedFilter:
         Initialize with configurable thresholds and region.
         
         Args:
-            config: Configuration dictionary with threshold values
+            config: Optional overrides merged on top of region defaults
             region: Region/country code for region-specific rules
         """
-        self.region = region
-        self.region_rules = RegionSpecificRules()
-        
-        # Load region-specific defaults
-        region_config = self.region_rules.get_config(region)
-        
-        # Override with user config if provided
+        from app.regions import RegionRegistry
+
+        self.region = RegionRegistry.normalize(region)
+        region_config = RegionRegistry.get_rules(self.region)
+
+        # Override with user config if provided (global env overrides, etc.)
         if config:
             region_config.update(config)
-        
+
         self.config = region_config
-        
-        # Set individual thresholds
+
         self.postal_code_threshold = self.config.get('postal_code_threshold', 0.8)
         self.street_threshold = self.config.get('street_threshold', 0.7)
         self.city_threshold = self.config.get('city_threshold', 0.8)
         self.house_number_threshold = self.config.get('house_number_threshold', 0.8)
         self.overall_threshold = self.config.get('overall_threshold', 0.7)
-        
-        # Strict matching requirements
+
         self.require_postal_code_match = self.config.get('require_postal_code_match', False)
         self.require_city_match = self.config.get('require_city_match', True)
         self.require_street_match = self.config.get('require_street_match', True)
-        
-        # Region-specific features
+
         self.allow_partial_house_number = self.config.get('allow_partial_house_number', True)
         self.allow_house_names = self.config.get('allow_house_names', False)
         self.allow_area_locality_matching = self.config.get('allow_area_locality_matching', False)
         self.state_abbreviation_matching = self.config.get('state_abbreviation_matching', False)
-        
-        logger.info(f"RuleBasedFilter initialized for region {region} with config: {self.config}")
-    
+        self._user_overrides = dict(config or {})
+
+        logger.debug(f"RuleBasedFilter initialized for region {self.region}")
+
     def set_region(self, region: str):
-        """Update the region and reload configuration."""
-        self.region = region
-        region_config = self.region_rules.get_config(region)
-        self.config.update(region_config)
-        self.__init__(self.config, region)
-    
+        """Update the region and reload configuration, preserving user overrides."""
+        self.__init__(config=self._user_overrides, region=region)    
     def apply_rules(
         self, 
         similarities: ComponentSimilarities,

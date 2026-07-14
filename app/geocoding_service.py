@@ -20,36 +20,50 @@ except ImportError:
 class GeocodingService:
     """
     Geocoding service for address validation and distance calculation.
+
+    Providers:
+      - nominatim: OpenStreetMap Nominatim (dev / low volume only)
+      - none: disabled (no external calls)
     """
     
-    def __init__(self, user_agent: str = "address-matching-service", timeout: int = 10):
-        """
-        Initialize geocoding service.
-        
-        Args:
-            user_agent: User agent string for geocoding requests
-            timeout: Timeout for geocoding requests in seconds
-        """
+    def __init__(
+        self,
+        user_agent: str = "address-matching-service",
+        timeout: int = 10,
+        provider: str = "nominatim",
+        enabled: bool = True,
+    ):
         self.user_agent = user_agent
         self.timeout = timeout
-        self.geopy_available = GEOPY_AVAILABLE
-        
-        if self.geopy_available:
+        self.provider = (provider or "nominatim").strip().lower()
+        self.enabled = enabled and self.provider not in {"none", "off", "disabled"}
+        self.geopy_available = GEOPY_AVAILABLE and self.enabled and self.provider == "nominatim"
+
+        if self.enabled and self.provider == "nominatim" and self.geopy_available:
             self.geolocator = Nominatim(user_agent=user_agent, timeout=timeout)
+            logger.debug(
+                "GeocodingService using Nominatim (not for high-volume production)"
+            )
         else:
             self.geolocator = None
-            
-        # Rate limiting (protected by async lock for concurrent callers)
+            if self.enabled and self.provider not in {"nominatim", "none", "off", "disabled"}:
+                logger.warning(
+                    "Unknown geocoding provider %r; geospatial disabled. "
+                    "Supported: nominatim, none",
+                    self.provider,
+                )
+            elif not self.enabled:
+                logger.debug("GeocodingService disabled")
+
         self.last_request_time = 0
-        self.min_request_interval = 1.0  # 1 second between requests to be respectful
+        self.min_request_interval = 1.0
         self._rate_lock: Optional[asyncio.Lock] = None
-        
-        logger.debug(f"GeocodingService initialized with user_agent: {user_agent}")
 
     def _get_rate_lock(self) -> asyncio.Lock:
         if self._rate_lock is None:
             self._rate_lock = asyncio.Lock()
-        return self._rate_lock    
+        return self._rate_lock
+
     async def geocode_address(self, address: str) -> Optional[Tuple[float, float]]:
         """
         Geocode an address to get latitude and longitude.

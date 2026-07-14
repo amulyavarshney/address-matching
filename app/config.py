@@ -4,362 +4,19 @@ from loguru import logger
 
 
 class RegionalConfig:
-    """Regional configuration templates for different address systems."""
-    
-    # Base configurations for different regions
-    REGIONAL_TEMPLATES = {
-        'US': {
-            'name': 'United States',
-            'address_parser': {
-                'use_libpostal': True,
-                'postal_code_pattern': r'^\d{5}(-\d{4})?$',
-                'state_abbreviations': True,
-                'house_number_priority': 'high',
-            },
-            'fuzzy_matching': {
-                'region_weights': {
-                    'house_number': 0.20,
-                    'street': 0.25,
-                    'city': 0.20,
-                    'postal_code': 0.20,
-                    'state': 0.10,
-                    'country': 0.05,
-                },
-                'transliteration_support': False,
-                'case_sensitive': False,
-            },
-            'rule_based_filter': {
-                'postal_code_threshold': 0.9,
-                'street_threshold': 0.7,
-                'city_threshold': 0.8,
-                'house_number_threshold': 0.8,
-                'overall_threshold': 0.7,
-                'require_postal_code_match': False,
-                'require_city_match': True,
-                'require_street_match': True,
-                'allow_partial_house_number': True,
-                'state_abbreviation_matching': True,
-            },
-            'geocoding': {
-                'country_bias': 'US',
-                'max_distance_threshold': 100.0,  # meters
-                'use_structured_geocoding': True,
-            },
-            'ml_model': {
-                'use_regional_features': True,
-                'confidence_threshold': 0.7,
-                'feature_weights': {
-                    'postal_code_weight': 0.3,
-                    'street_weight': 0.25,
-                    'city_weight': 0.2,
-                }
-            }
-        },
-        
-        'CA': {
-            'name': 'Canada',
-            'address_parser': {
-                'use_libpostal': True,
-                'postal_code_pattern': r'^[A-Z]\d[A-Z]\s?\d[A-Z]\d$',
-                'state_abbreviations': True,
-                'house_number_priority': 'high',
-            },
-            'fuzzy_matching': {
-                'region_weights': {
-                    'house_number': 0.20,
-                    'street': 0.25,
-                    'city': 0.20,
-                    'postal_code': 0.20,
-                    'state': 0.10,
-                    'country': 0.05,
-                },
-                'transliteration_support': False,
-                'case_sensitive': False,
-            },
-            'rule_based_filter': {
-                'postal_code_threshold': 0.9,
-                'street_threshold': 0.7,
-                'city_threshold': 0.8,
-                'house_number_threshold': 0.8,
-                'overall_threshold': 0.7,
-                'require_postal_code_match': False,
-                'require_city_match': True,
-                'require_street_match': True,
-                'allow_partial_house_number': True,
-                'state_abbreviation_matching': True,
-            },
-            'geocoding': {
-                'country_bias': 'CA',
-                'max_distance_threshold': 100.0,
-                'use_structured_geocoding': True,
-            },
-            'ml_model': {
-                'use_regional_features': True,
-                'confidence_threshold': 0.7,
-                'feature_weights': {
-                    'postal_code_weight': 0.3,
-                    'street_weight': 0.25,
-                    'city_weight': 0.2,
-                }
-            }
-        },
-        
-        'UK': {
-            'name': 'United Kingdom',
-            'address_parser': {
-                'use_libpostal': True,
-                'postal_code_pattern': r'^[A-Z]{1,2}[0-9R][0-9A-Z]?\s?[0-9][A-Z]{2}$',
-                'state_abbreviations': False,
-                'house_number_priority': 'medium',  # House names common
-                'allow_house_names': True,
-            },
-            'fuzzy_matching': {
-                'region_weights': {
-                    'house_number': 0.15,  # Less important due to house names
-                    'street': 0.25,
-                    'city': 0.25,
-                    'postal_code': 0.25,  # Very reliable in UK
-                    'state': 0.05,
-                    'country': 0.05,
-                },
-                'transliteration_support': False,
-                'case_sensitive': False,
-            },
-            'rule_based_filter': {
-                'postal_code_threshold': 0.8,  # More flexible for UK postcodes
-                'street_threshold': 0.75,
-                'city_threshold': 0.8,
-                'house_number_threshold': 0.7,  # More flexible for house names
-                'overall_threshold': 0.7,
-                'require_postal_code_match': False,
-                'require_city_match': True,
-                'require_street_match': True,
-                'allow_partial_house_number': True,
-                'allow_house_names': True,
-            },
-            'geocoding': {
-                'country_bias': 'GB',
-                'max_distance_threshold': 50.0,
-                'use_structured_geocoding': True,
-            },
-            'ml_model': {
-                'use_regional_features': True,
-                'confidence_threshold': 0.7,
-                'feature_weights': {
-                    'postcode_reliability': 0.35,
-                    'house_name_flexibility': 0.15,
-                    'street_weight': 0.25,
-                }
-            }
-        },
-        
-        'DE': {
-            'name': 'Germany',
-            'address_parser': {
-                'use_libpostal': True,
-                'postal_code_pattern': r'^\d{5}$',
-                'state_abbreviations': False,
-                'house_number_priority': 'high',  # Very important in German addresses
-                'street_number_after_name': True,
-            },
-            'fuzzy_matching': {
-                'region_weights': {
-                    'house_number': 0.25,  # Very important
-                    'street': 0.25,
-                    'city': 0.20,
-                    'postal_code': 0.25,  # PLZ very important
-                    'state': 0.05,
-                    'country': 0.00,
-                },
-                'transliteration_support': False,
-                'case_sensitive': False,
-            },
-            'rule_based_filter': {
-                'postal_code_threshold': 0.9,
-                'street_threshold': 0.8,
-                'city_threshold': 0.8,
-                'house_number_threshold': 0.9,  # German addresses very precise
-                'overall_threshold': 0.75,
-                'require_postal_code_match': True,  # PLZ important
-                'require_city_match': True,
-                'require_street_match': True,
-                'allow_partial_house_number': False,  # Strict in Germany
-            },
-            'geocoding': {
-                'country_bias': 'DE',
-                'max_distance_threshold': 50.0,
-                'use_structured_geocoding': True,
-            },
-            'ml_model': {
-                'use_regional_features': True,
-                'confidence_threshold': 0.75,
-                'feature_weights': {
-                    'house_number_precision': 0.3,
-                    'postal_city_combo': 0.3,
-                    'street_weight': 0.25,
-                }
-            }
-        },
-        
-        'FR': {
-            'name': 'France',
-            'address_parser': {
-                'use_libpostal': True,
-                'postal_code_pattern': r'^\d{5}$',
-                'state_abbreviations': False,
-                'house_number_priority': 'high',
-                'number_before_street': True,
-            },
-            'fuzzy_matching': {
-                'region_weights': {
-                    'house_number': 0.20,
-                    'street': 0.25,
-                    'city': 0.25,
-                    'postal_code': 0.25,
-                    'state': 0.05,
-                    'country': 0.00,
-                },
-                'transliteration_support': False,
-                'case_sensitive': False,
-            },
-            'rule_based_filter': {
-                'postal_code_threshold': 0.9,
-                'street_threshold': 0.75,
-                'city_threshold': 0.8,
-                'house_number_threshold': 0.8,
-                'overall_threshold': 0.7,
-                'require_postal_code_match': False,
-                'require_city_match': True,
-                'require_street_match': True,
-                'allow_partial_house_number': True,
-            },
-            'geocoding': {
-                'country_bias': 'FR',
-                'max_distance_threshold': 75.0,
-                'use_structured_geocoding': True,
-            },
-            'ml_model': {
-                'use_regional_features': True,
-                'confidence_threshold': 0.7,
-                'feature_weights': {
-                    'postal_code_weight': 0.3,
-                    'street_weight': 0.25,
-                    'city_weight': 0.25,
-                }
-            }
-        },
-        
-        'IN': {
-            'name': 'India',
-            'address_parser': {
-                'use_libpostal': True,
-                'postal_code_pattern': r'^\d{6}$',
-                'state_abbreviations': False,
-                'house_number_priority': 'medium',  # Complex numbering systems
-                'support_flat_numbers': True,
-                'support_locality_areas': True,
-            },
-            'fuzzy_matching': {
-                'region_weights': {
-                    'house_number': 0.10,  # Less reliable
-                    'street': 0.15,  # Often inconsistent
-                    'city': 0.25,
-                    'postal_code': 0.35,  # Pincode very important
-                    'state': 0.10,
-                    'country': 0.05,
-                },
-                'transliteration_support': True,  # Important for Indian addresses
-                'case_sensitive': False,
-                'locality_matching': True,
-            },
-            'rule_based_filter': {
-                'postal_code_threshold': 0.9,  # Pincode very important
-                'street_threshold': 0.6,  # More flexible for complex Indian addresses
-                'city_threshold': 0.7,  # More flexible for city name variations
-                'house_number_threshold': 0.6,  # Indian house numbers can be complex
-                'overall_threshold': 0.65,  # Lower overall threshold
-                'require_postal_code_match': True,  # Pincode critical
-                'require_city_match': True,
-                'require_street_match': False,  # Street info often inconsistent
-                'allow_partial_house_number': True,
-                'allow_area_locality_matching': True,  # Indian addresses have areas/localities
-            },
-            'geocoding': {
-                'country_bias': 'IN',
-                'max_distance_threshold': 200.0,  # Higher due to density
-                'use_structured_geocoding': True,
-                'fallback_to_pincode': True,
-            },
-            'ml_model': {
-                'use_regional_features': True,
-                'confidence_threshold': 0.65,  # Lower threshold for Indian addresses
-                'feature_weights': {
-                    'pincode_weight': 0.4,
-                    'city_flexibility': 0.25,
-                    'street_weight': 0.15,
-                    'locality_weight': 0.2,
-                }
-            }
-        },
-        
-        'AU': {
-            'name': 'Australia',
-            'address_parser': {
-                'use_libpostal': True,
-                'postal_code_pattern': r'^\d{4}$',
-                'state_abbreviations': True,
-                'house_number_priority': 'high',
-            },
-            'fuzzy_matching': {
-                'region_weights': {
-                    'house_number': 0.20,
-                    'street': 0.25,
-                    'city': 0.20,
-                    'postal_code': 0.20,
-                    'state': 0.10,
-                    'country': 0.05,
-                },
-                'transliteration_support': False,
-                'case_sensitive': False,
-            },
-            'rule_based_filter': {
-                'postal_code_threshold': 0.9,
-                'street_threshold': 0.75,
-                'city_threshold': 0.8,
-                'house_number_threshold': 0.8,
-                'overall_threshold': 0.7,
-                'require_postal_code_match': False,
-                'require_city_match': True,
-                'require_street_match': True,
-                'allow_partial_house_number': True,
-                'state_abbreviation_matching': True,
-            },
-            'geocoding': {
-                'country_bias': 'AU',
-                'max_distance_threshold': 100.0,
-                'use_structured_geocoding': True,
-            },
-            'ml_model': {
-                'use_regional_features': True,
-                'confidence_threshold': 0.7,
-                'feature_weights': {
-                    'postal_code_weight': 0.3,
-                    'street_weight': 0.25,
-                    'city_weight': 0.2,
-                }
-            }
-        },
-    }
-    
+    """Regional configuration templates backed by RegionRegistry."""
+
     @classmethod
     def get_region_config(cls, region: str) -> Dict[str, Any]:
         """Get configuration for a specific region."""
-        return cls.REGIONAL_TEMPLATES.get(region, cls.REGIONAL_TEMPLATES['US'])
-    
+        from app.regions import RegionRegistry
+        return RegionRegistry.get_template(region)
+
     @classmethod
     def get_supported_regions(cls) -> list[str]:
         """Get list of all supported regions."""
-        return list(cls.REGIONAL_TEMPLATES.keys())
+        from app.regions import RegionRegistry
+        return RegionRegistry.supported_regions()
 
 
 class AddressMatchingConfig:
@@ -683,6 +340,18 @@ class AddressMatchingConfig:
         if max_batch_size is not None:
             security_config['max_batch_size'] = max_batch_size
 
+        rate_limiting = self._env_bool('RATE_LIMITING')
+        if rate_limiting is not None:
+            security_config['rate_limiting'] = rate_limiting
+
+        max_rpm = self._env_int('MAX_REQUESTS_PER_MINUTE')
+        if max_rpm is not None:
+            security_config['max_requests_per_minute'] = max_rpm
+
+        geo_provider = os.getenv('GEOCODING_PROVIDER')
+        if geo_provider:
+            geocoding_config['provider'] = geo_provider.strip().lower()
+
         # Component toggles (DISABLE_* wins over USE_*)
         use_ml = self._env_bool('USE_ML_MODEL')
         if use_ml is not None:
@@ -751,7 +420,7 @@ class AddressMatchingConfig:
         if geocoding_config:
             env_config['geocoding'] = geocoding_config
         if rules_config:
-            env_config['rule_based_filter'] = rules_config
+            env_config['rule_overrides'] = rules_config
         if ml_config:
             env_config['ml_model'] = ml_config
         if security_config:
@@ -766,8 +435,8 @@ class AddressMatchingConfig:
         system = self.get_system_config()
         components = self.config.get('components', {})
         geocoding = self.get_component_config('geocoding')
-        rules = self.get_component_config('rule_based_filter')
         ml = self.get_component_config('ml_model')
+        security = self.config.get('security', {})
 
         return {
             'default_region': system.get('default_region', self.region),
@@ -779,12 +448,16 @@ class AddressMatchingConfig:
                 'user_agent', 'address-matching-service'
             ),
             'geocoding_timeout': geocoding.get('timeout', 10),
+            'geocoding_provider': geocoding.get('provider', 'nominatim'),
             'ml_model_path': ml.get('model_path'),
             'ml_auto_train': ml.get('auto_train', False),
-            'rules': rules,
+            # Global threshold overrides only — never full regional templates
+            'rule_overrides': self.config.get('rule_overrides', {}),
             'log_level': system.get('log_level', 'INFO'),
             'api_host': system.get('api_host', '0.0.0.0'),
             'api_port': system.get('api_port', 8000),
+            'rate_limiting': security.get('rate_limiting', True),
+            'max_requests_per_minute': security.get('max_requests_per_minute', 60),
         }
 
     def to_api_settings(self) -> Dict[str, Any]:
@@ -803,6 +476,8 @@ class AddressMatchingConfig:
             'cors_origins': cors_origins,
             'max_address_length': int(security.get('max_address_length', 500)),
             'max_batch_size': int(security.get('max_batch_size', 50)),
+            'rate_limiting': bool(security.get('rate_limiting', True)),
+            'max_requests_per_minute': int(security.get('max_requests_per_minute', 60)),
         }
     
     def __str__(self) -> str:

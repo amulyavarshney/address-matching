@@ -14,6 +14,7 @@ def _reload_app(monkeypatch, **env):
         "LOG_LEVEL": "WARNING",
         "CORS_ORIGINS": "*",
         "ML_AUTO_TRAIN": "false",
+        "RATE_LIMITING": "false",
     }
     defaults.update(env)
     for key, value in defaults.items():
@@ -34,7 +35,10 @@ def _reload_app(monkeypatch, **env):
 
 @pytest.fixture
 def client(monkeypatch):
-    main_module = _reload_app(monkeypatch)
+    main_module = _reload_app(
+        monkeypatch,
+        RATE_LIMITING="false",
+    )
     with TestClient(main_module.app) as test_client:
         yield test_client, main_module
 
@@ -205,3 +209,33 @@ def test_library_import_does_not_require_server():
         {"use_ml_model": False, "use_geospatial": False, "ml_auto_train": False}
     )
     assert isinstance(matcher, AddressMatcher)
+
+
+def test_rate_limit_returns_429(monkeypatch):
+    main_module = _reload_app(
+        monkeypatch,
+        RATE_LIMITING="true",
+        MAX_REQUESTS_PER_MINUTE="2",
+    )
+    payload = {
+        "address1": "123 Main St, Anytown, CA 90210",
+        "address2": "123 Main Street, Anytown, CA 90210",
+    }
+    with TestClient(main_module.app) as test_client:
+        assert test_client.post("/match-addresses", json=payload).status_code == 200
+        assert test_client.post("/match-addresses", json=payload).status_code == 200
+        limited = test_client.post("/match-addresses", json=payload)
+        assert limited.status_code == 429
+        assert limited.json()["detail"] == "Rate limit exceeded"
+        # Health remains available
+        assert test_client.get("/health").status_code == 200
+
+
+def test_region_registry_is_single_source():
+    from app.regions import RegionRegistry
+    from app.fuzzy_matcher import RegionAwareWeights
+    from app.rule_based_filter import RegionSpecificRules
+
+    assert RegionAwareWeights.get_weights("IN") == RegionRegistry.get_weights("IN")
+    assert RegionSpecificRules.get_config("DE") == RegionRegistry.get_rules("DE")
+    assert "IN" in RegionRegistry.supported_regions()
