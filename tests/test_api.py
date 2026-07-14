@@ -6,17 +6,36 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-@pytest.fixture
-def client(monkeypatch):
-    """Import app with ML/geocoding disabled for fast deterministic tests."""
-    monkeypatch.setenv("USE_ML_MODEL", "false")
-    monkeypatch.setenv("USE_GEOSPATIAL", "false")
-    monkeypatch.setenv("LOG_LEVEL", "WARNING")
-    # Ensure a clean import of main with the env above
+def _reload_app(monkeypatch, **env):
+    """Reload main with given env overrides."""
+    defaults = {
+        "USE_ML_MODEL": "false",
+        "USE_GEOSPATIAL": "false",
+        "LOG_LEVEL": "WARNING",
+        "CORS_ORIGINS": "*",
+    }
+    defaults.update(env)
+    for key, value in defaults.items():
+        if value is None:
+            monkeypatch.delenv(key, raising=False)
+        else:
+            monkeypatch.setenv(key, value)
+
+    # Ensure auth is off unless a test sets API_KEY
+    if "API_KEY" not in env:
+        monkeypatch.delenv("API_KEY", raising=False)
+
     import importlib
     import main as main_module
 
     importlib.reload(main_module)
+    return main_module
+
+
+@pytest.fixture
+def client(monkeypatch):
+    """Import app with ML/geocoding disabled for fast deterministic tests."""
+    main_module = _reload_app(monkeypatch)
     with TestClient(main_module.app) as test_client:
         yield test_client, main_module
 
@@ -69,6 +88,24 @@ def test_match_addresses_validation_error(client):
     assert response.status_code == 422
 
 
+def test_match_addresses_rejects_blank(client):
+    test_client, _ = client
+    response = test_client.post(
+        "/match-addresses",
+        json={"address1": "   ", "address2": "123 Main St"},
+    )
+    assert response.status_code == 422
+
+
+def test_match_addresses_rejects_too_long(client):
+    test_client, _ = client
+    response = test_client.post(
+        "/match-addresses",
+        json={"address1": "x" * 501, "address2": "123 Main St"},
+    )
+    assert response.status_code == 422
+
+
 def test_match_addresses_internal_error_returns_500(client):
     test_client, main_module = client
     with patch.object(
@@ -85,3 +122,80 @@ def test_match_addresses_internal_error_returns_500(client):
         )
     assert response.status_code == 500
     assert response.json()["detail"] == "Internal server error during address matching"
+
+
+def test_batch_match_addresses(client):
+    test_client, _ = client
+    response = test_client.post(
+        "/match-addresses/batch",
+        json={
+            "region": "US",
+            "pairs": [
+                {
+                    "address1": "123 Main St, Anytown, CA 90210",
+                    "address2": "123 Main Street, Anytown, CA 90210",
+                },
+                {
+                    "address1": "1 Infinite Loop, Cupertino, CA 95014",
+                    "address2": "1 Infinite Loop, Cupertino, California 95014",
+                },
+            ],
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 2
+    assert len(body["results"]) == 2
+    assert "match" in body["results"][0]
+
+
+def test_batch_rejects_empty_pairs(client):
+    test_client, _ = client
+    response = test_client.post("/match-addresses/batch", json={"pairs": []})
+    assert response.status_code == 422
+
+
+def test_api_key_required_when_configured(monkeypatch):
+    main_module = _reload_app(monkeypatch, API_KEY="secret-key")
+    with TestClient(main_module.app) as test_client:
+        denied = test_client.post(
+            "/match-addresses",
+            json={
+                "address1": "123 Main St, Anytown, CA 90210",
+                "address2": "123 Main Street, Anytown, CA 90210",
+            },
+        )
+        assert denied.status_code == 401
+
+        allowed = test_client.post(
+            "/match-addresses",
+            headers={"X-API-Key": "secret-key"},
+            json={
+                "address1": "123 Main St, Anytown, CA 90210",
+                "address2": "123 Main Street, Anytown, CA 90210",
+            },
+        )
+        assert allowed.status_code == 200
+
+        # Health remains public
+        assert test_client.get("/health").status_code == 200
+
+
+def test_cors_origins_from_env(monkeypatch):
+    main_module = _reload_app(
+        monkeypatch,
+        CORS_ORIGINS="https://app.example.com,https://admin.example.com",
+    )
+    with TestClient(main_module.app) as test_client:
+        response = test_client.options(
+            "/match-addresses",
+            headers={
+                "Origin": "https://app.example.com",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        assert response.status_code == 200
+        assert (
+            response.headers.get("access-control-allow-origin")
+            == "https://app.example.com"
+        )

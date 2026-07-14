@@ -438,6 +438,9 @@ class AddressMatchingConfig:
                 'rate_limiting': True,
                 'max_requests_per_minute': 60,
                 'api_key_required': False,
+                'cors_origins': ['*'],
+                'max_address_length': 500,
+                'max_batch_size': 50,
             },
             'logging': {
                 'log_requests': True,
@@ -643,6 +646,7 @@ class AddressMatchingConfig:
         geocoding_config: Dict[str, Any] = {}
         rules_config: Dict[str, Any] = {}
         ml_config: Dict[str, Any] = {}
+        security_config: Dict[str, Any] = {}
 
         # System / API
         region = os.getenv('ADDRESS_MATCHING_REGION')
@@ -660,6 +664,24 @@ class AddressMatchingConfig:
         api_port = self._env_int('API_PORT')
         if api_port is not None:
             system_config['api_port'] = api_port
+
+        # Security / API surface
+        api_key = os.getenv('API_KEY')
+        if api_key is not None:
+            security_config['api_key'] = api_key.strip()
+
+        cors_origins = os.getenv('CORS_ORIGINS')
+        if cors_origins is not None:
+            origins = [o.strip() for o in cors_origins.split(',') if o.strip()]
+            security_config['cors_origins'] = origins or ['*']
+
+        max_address_length = self._env_int('MAX_ADDRESS_LENGTH')
+        if max_address_length is not None:
+            security_config['max_address_length'] = max_address_length
+
+        max_batch_size = self._env_int('MAX_BATCH_SIZE')
+        if max_batch_size is not None:
+            security_config['max_batch_size'] = max_batch_size
 
         # Component toggles (DISABLE_* wins over USE_*)
         use_ml = self._env_bool('USE_ML_MODEL')
@@ -728,6 +750,8 @@ class AddressMatchingConfig:
             env_config['rule_based_filter'] = rules_config
         if ml_config:
             env_config['ml_model'] = ml_config
+        if security_config:
+            env_config['security'] = security_config
 
         return env_config
 
@@ -756,6 +780,24 @@ class AddressMatchingConfig:
             'log_level': system.get('log_level', 'INFO'),
             'api_host': system.get('api_host', '0.0.0.0'),
             'api_port': system.get('api_port', 8000),
+        }
+
+    def to_api_settings(self) -> Dict[str, Any]:
+        """Settings for HTTP layer (auth, CORS, limits)."""
+        security = self.config.get('security', {})
+        cors_origins = security.get('cors_origins', ['*'])
+        if isinstance(cors_origins, str):
+            cors_origins = [o.strip() for o in cors_origins.split(',') if o.strip()] or ['*']
+
+        api_key = security.get('api_key') or os.getenv('API_KEY')
+        if api_key is not None:
+            api_key = str(api_key).strip() or None
+
+        return {
+            'api_key': api_key,
+            'cors_origins': cors_origins,
+            'max_address_length': int(security.get('max_address_length', 500)),
+            'max_batch_size': int(security.get('max_batch_size', 50)),
         }
     
     def __str__(self) -> str:

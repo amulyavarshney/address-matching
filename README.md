@@ -154,6 +154,29 @@ View the interactive API documentation at `/docs`.
 }
 ```
 
+### Batch Match Endpoint
+
+**POST** `/match-addresses/batch`
+
+```json
+{
+  "region": "US",
+  "pairs": [
+    {
+      "address1": "123 Main St, Anytown, CA 90210",
+      "address2": "123 Main Street, Anytown, CA 90210"
+    }
+  ]
+}
+```
+
+Returns `{ "results": [...], "count": N }`. Max batch size is controlled by `MAX_BATCH_SIZE` (default 50).
+
+### Authentication
+
+When `API_KEY` is set, protected routes require header `X-API-Key: <key>`.
+`/`, `/health`, `/health/ready`, and OpenAPI docs remain public.
+
 ### Example Requests
 
 #### Using curl
@@ -230,6 +253,10 @@ ML_MODEL_PATH=address_matching_model.pkl
 # API Configuration
 API_HOST=0.0.0.0
 API_PORT=8000
+API_KEY=
+CORS_ORIGINS=*
+MAX_ADDRESS_LENGTH=500
+MAX_BATCH_SIZE=50
 
 # Logging
 LOG_LEVEL=INFO
