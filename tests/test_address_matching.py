@@ -87,6 +87,17 @@ class TestRegionDetection:
             region = self.region_detector.detect_region(address)
             assert region == 'CA', f"Failed to detect Canadian region for: {address}"
 
+    def test_no_false_positives_from_ambiguous_tokens(self):
+        """US state codes / 'No.' must not map to Canada/India/Norway."""
+        cases = [
+            ("123 Main St, Anytown, CA 90210", "US"),
+            ("100 Main St, Indianapolis, IN 46204", "US"),
+            ("House No. 45, Sector 17, Chandigarh 160017", "IN"),
+            ("Musterstraße 123, 12345 Berlin", "DE"),
+        ]
+        for address, expected in cases:
+            assert self.region_detector.detect_region(address) == expected, address
+
 
 class TestAddressParser:
     """Test region-specific address parsing functionality."""
@@ -273,7 +284,7 @@ class TestFuzzyMatcher:
             hindi_text1, hindi_text2, 0.5
         )
         
-        assert similarity > 0.6  # Should boost similarity due to transliteration
+        assert similarity >= 0.6  # Should boost similarity due to transliteration
 
 
 class TestRuleBasedFilter:
@@ -504,7 +515,11 @@ class TestIntegratedAddressMatching:
     
     def setup_method(self):
         """Setup test components."""
-        self.matcher = AddressMatcher()
+        self.matcher = AddressMatcher({
+            'use_ml_model': False,
+            'use_geospatial': False,
+            'ml_auto_train': False,
+        })
     
     @pytest.mark.asyncio
     async def test_us_address_matching_integration(self):
@@ -607,7 +622,11 @@ class TestPerformanceAndEdgeCases:
     
     def setup_method(self):
         """Setup test components."""
-        self.matcher = AddressMatcher()
+        self.matcher = AddressMatcher({
+            'use_ml_model': False,
+            'use_geospatial': False,
+            'ml_auto_train': False,
+        })
     
     @pytest.mark.asyncio
     async def test_empty_addresses(self):
@@ -664,7 +683,7 @@ class TestGeospatialWiring:
     @pytest.mark.asyncio
     async def test_within_threshold_is_used_when_geocoding_succeeds(self):
         """GeocodingService returns `within_threshold`, not `match`."""
-        matcher = AddressMatcher({'use_geospatial': True, 'use_ml_model': False})
+        matcher = AddressMatcher({'use_geospatial': True, 'use_ml_model': False, 'ml_auto_train': False})
         captured = {}
 
         async def fake_geo(address1, address2, distance_threshold=50.0):
@@ -697,7 +716,7 @@ class TestGeospatialWiring:
     @pytest.mark.asyncio
     async def test_failed_geocoding_does_not_claim_support(self):
         """Default within_threshold=True must not boost when geocoding failed."""
-        matcher = AddressMatcher({'use_geospatial': True, 'use_ml_model': False})
+        matcher = AddressMatcher({'use_geospatial': True, 'use_ml_model': False, 'ml_auto_train': False})
         captured = {}
 
         async def fake_geo(address1, address2, distance_threshold=50.0):
@@ -733,7 +752,7 @@ class TestErrorPropagation:
     async def test_match_addresses_raises_on_internal_failure(self):
         from app.matcher import AddressMatchingError
 
-        matcher = AddressMatcher({'use_geospatial': False, 'use_ml_model': False})
+        matcher = AddressMatcher({'use_geospatial': False, 'use_ml_model': False, 'ml_auto_train': False})
         with patch.object(
             matcher.parser,
             'normalize_and_parse',

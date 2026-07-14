@@ -1,30 +1,26 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import List, Optional
 import os
 
 
-def _max_address_length() -> int:
+def max_address_length() -> int:
     try:
         return max(1, int(os.getenv("MAX_ADDRESS_LENGTH", "500")))
     except ValueError:
         return 500
 
 
-def _max_batch_size() -> int:
+def max_batch_size() -> int:
     try:
         return max(1, int(os.getenv("MAX_BATCH_SIZE", "50")))
     except ValueError:
         return 50
 
 
-MAX_ADDRESS_LENGTH = _max_address_length()
-MAX_BATCH_SIZE = _max_batch_size()
-
-
 class AddressMatchRequest(BaseModel):
     """Request model for address matching."""
-    address1: str = Field(..., min_length=1, max_length=MAX_ADDRESS_LENGTH)
-    address2: str = Field(..., min_length=1, max_length=MAX_ADDRESS_LENGTH)
+    address1: str = Field(..., min_length=1)
+    address2: str = Field(..., min_length=1)
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -37,10 +33,13 @@ class AddressMatchRequest(BaseModel):
 
     @field_validator("address1", "address2")
     @classmethod
-    def strip_non_blank(cls, value: str) -> str:
+    def strip_and_limit(cls, value: str) -> str:
         cleaned = value.strip()
         if not cleaned:
             raise ValueError("address must not be blank")
+        limit = max_address_length()
+        if len(cleaned) > limit:
+            raise ValueError(f"address exceeds max length of {limit}")
         return cleaned
 
 
@@ -121,7 +120,6 @@ class BatchAddressMatchRequest(BaseModel):
     pairs: List[AddressMatchRequest] = Field(
         ...,
         min_length=1,
-        max_length=MAX_BATCH_SIZE,
         description="Address pairs to match",
     )
     region: Optional[str] = Field(
@@ -151,6 +149,13 @@ class BatchAddressMatchRequest(BaseModel):
             return None
         cleaned = value.strip().upper()
         return cleaned or None
+
+    @model_validator(mode="after")
+    def enforce_batch_limit(self):
+        limit = max_batch_size()
+        if len(self.pairs) > limit:
+            raise ValueError(f"batch size exceeds max of {limit}")
+        return self
 
 
 class BatchAddressMatchResponse(BaseModel):

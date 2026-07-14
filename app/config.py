@@ -740,6 +740,10 @@ class AddressMatchingConfig:
         if ml_model_path:
             ml_config['model_path'] = ml_model_path
 
+        ml_auto_train = self._env_bool('ML_AUTO_TRAIN')
+        if ml_auto_train is not None:
+            ml_config['auto_train'] = ml_auto_train
+
         if system_config:
             env_config['system'] = system_config
         if components_config:
@@ -776,6 +780,7 @@ class AddressMatchingConfig:
             ),
             'geocoding_timeout': geocoding.get('timeout', 10),
             'ml_model_path': ml.get('model_path'),
+            'ml_auto_train': ml.get('auto_train', False),
             'rules': rules,
             'log_level': system.get('log_level', 'INFO'),
             'api_host': system.get('api_host', '0.0.0.0'),

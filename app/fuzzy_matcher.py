@@ -5,10 +5,10 @@ import re
 try:
     from rapidfuzz import fuzz, process
     RAPIDFUZZ_AVAILABLE = True
-    logger.info("RapidFuzz library is available")
+    logger.debug("RapidFuzz library is available")
 except ImportError:
     RAPIDFUZZ_AVAILABLE = False
-    logger.warning("RapidFuzz library not available, using fallback similarity")
+    logger.debug("RapidFuzz library not available, using fallback similarity")
 
 from app.models import NormalizedAddress, ComponentSimilarities
 
@@ -38,8 +38,8 @@ class TransliterationMatcher:
         'theatre': ['theater'],
         
         # European variations
-        'straße': ['strasse', 'str'],
-        'straße': ['street', 'st'],
+        'straße': ['strasse', 'str', 'street', 'st'],
+        'strasse': ['straße', 'str', 'street', 'st'],
         'platz': ['plaza', 'place'],
         'gasse': ['lane', 'ln'],
         

@@ -10,44 +10,55 @@ try:
     from sklearn.model_selection import train_test_split
     from sklearn.metrics import accuracy_score, classification_report
     SKLEARN_AVAILABLE = True
-    logger.info("Scikit-learn library is available")
+    logger.debug("Scikit-learn library is available")
 except ImportError:
     SKLEARN_AVAILABLE = False
-    logger.warning("Scikit-learn library not available, ML model disabled")
+    logger.debug("Scikit-learn library not available, ML model disabled")
 
 from app.models import ComponentSimilarities
 
 
 class AddressMatchingMLModel:
     """
-    ML model stub for address matching entity resolution.
+    Optional ML model for address matching entity resolution.
+
+    By default does not auto-train or write files. Load a pre-trained model via
+    model_path, or set auto_train=True for development only.
     """
-    
-    def __init__(self, model_path: Optional[str] = None):
-        """
-        Initialize the ML model.
-        
-        Args:
-            model_path: Path to saved model file
-        """
+
+    def __init__(
+        self,
+        model_path: Optional[str] = None,
+        auto_train: bool = False,
+        distance_threshold: float = 50.0,
+    ):
         self.sklearn_available = SKLEARN_AVAILABLE
         self.model = None
         self.scaler = None
         self.is_trained = False
         self.model_path = model_path or "address_matching_model.pkl"
-        
+        self.auto_train = auto_train
+        self.distance_threshold = distance_threshold
+
         if self.sklearn_available:
             self.model = LogisticRegression(random_state=42)
             self.scaler = StandardScaler()
-            
-            # Try to load existing model
+
             if self.model_path and os.path.exists(self.model_path):
                 self.load_model()
-            else:
-                logger.info("No existing model found, will train with synthetic data")
+            elif self.auto_train:
+                logger.warning(
+                    "ml_auto_train=True: training synthetic model "
+                    "(not recommended for production)"
+                )
                 self._train_with_synthetic_data()
+            else:
+                logger.debug(
+                    "No ML model file at %s; using heuristic fallback",
+                    self.model_path,
+                )
         else:
-            logger.warning("ML model functionality disabled due to missing dependencies")
+            logger.debug("ML model functionality disabled due to missing dependencies")
     
     def extract_features(
         self, 
@@ -100,7 +111,7 @@ class AddressMatchingMLModel:
             # Normalize distance (log transform to handle large distances)
             normalized_distance = min(1.0, np.log(max(1.0, geospatial_distance)) / np.log(1000))
             features.append(1.0 - normalized_distance)  # Convert to similarity
-            features.append(1.0 if geospatial_distance <= 50 else 0.0)  # Within 50m threshold
+            features.append(1.0 if geospatial_distance <= self.distance_threshold else 0.0)
         else:
             features.append(0.5)  # Neutral value when distance unavailable
             features.append(0.5)  # Neutral value for threshold

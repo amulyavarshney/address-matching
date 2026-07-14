@@ -13,6 +13,7 @@ def _reload_app(monkeypatch, **env):
         "USE_GEOSPATIAL": "false",
         "LOG_LEVEL": "WARNING",
         "CORS_ORIGINS": "*",
+        "ML_AUTO_TRAIN": "false",
     }
     defaults.update(env)
     for key, value in defaults.items():
@@ -21,7 +22,6 @@ def _reload_app(monkeypatch, **env):
         else:
             monkeypatch.setenv(key, value)
 
-    # Ensure auth is off unless a test sets API_KEY
     if "API_KEY" not in env:
         monkeypatch.delenv("API_KEY", raising=False)
 
@@ -34,7 +34,6 @@ def _reload_app(monkeypatch, **env):
 
 @pytest.fixture
 def client(monkeypatch):
-    """Import app with ML/geocoding disabled for fast deterministic tests."""
     main_module = _reload_app(monkeypatch)
     with TestClient(main_module.app) as test_client:
         yield test_client, main_module
@@ -109,7 +108,7 @@ def test_match_addresses_rejects_too_long(client):
 def test_match_addresses_internal_error_returns_500(client):
     test_client, main_module = client
     with patch.object(
-        main_module.matcher,
+        main_module.app.state.matcher,
         "match_addresses",
         new=AsyncMock(side_effect=RuntimeError("boom")),
     ):
@@ -176,8 +175,6 @@ def test_api_key_required_when_configured(monkeypatch):
             },
         )
         assert allowed.status_code == 200
-
-        # Health remains public
         assert test_client.get("/health").status_code == 200
 
 
@@ -199,3 +196,12 @@ def test_cors_origins_from_env(monkeypatch):
             response.headers.get("access-control-allow-origin")
             == "https://app.example.com"
         )
+
+
+def test_library_import_does_not_require_server():
+    from app import AddressMatcher, create_matcher
+
+    matcher = create_matcher(
+        {"use_ml_model": False, "use_geospatial": False, "ml_auto_train": False}
+    )
+    assert isinstance(matcher, AddressMatcher)

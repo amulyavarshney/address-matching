@@ -6,71 +6,148 @@ try:
     import postal.parser as postal_parser
     import postal.expand as postal_expand
     POSTAL_AVAILABLE = True
-    logger.info("Postal library is available")
+    logger.debug("Postal library is available")
 except ImportError:
     POSTAL_AVAILABLE = False
-    logger.warning("Postal library not available, using fallback parser")
+    logger.debug("Postal library not available, using fallback parser")
 
 from app.models import NormalizedAddress
 
 
 class RegionDetector:
     """Detect the region/country of an address for region-specific parsing."""
-    
-    # Postal code patterns for different regions
-    POSTAL_PATTERNS = {
-        'US': r'\b\d{5}(-\d{4})?\b',  # 12345 or 12345-6789
-        'CA': r'\b[A-Z]\d[A-Z]\s?\d[A-Z]\d\b',  # K1A 0A6
-        'UK': r'\b[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}\b',  # SW1A 1AA
-        'DE': r'\b\d{5}\b',  # 12345
-        'FR': r'\b\d{5}\b',  # 75001
-        'IT': r'\b\d{5}\b',  # 00118
-        'ES': r'\b\d{5}\b',  # 28001
-        'IN': r'\b\d{6}\b',  # 110001 (pincode)
-        'AU': r'\b\d{4}\b',  # 2000
-        'NL': r'\b\d{4}\s?[A-Z]{2}\b',  # 1012 AB
-        'SE': r'\b\d{3}\s?\d{2}\b',  # 123 45
-        'NO': r'\b\d{4}\b',  # 0150
-        'CH': r'\b\d{4}\b',  # 8001
-    }
-    
-    # Country indicators
+
+    # Distinctive postal patterns (checked before generic digit patterns)
+    DISTINCTIVE_POSTAL = (
+        ('UK', re.compile(r'\b[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}\b', re.I)),
+        ('CA', re.compile(r'\b[A-Z]\d[A-Z]\s?\d[A-Z]\d\b', re.I)),
+        ('NL', re.compile(r'\b\d{4}\s?[A-Z]{2}\b', re.I)),
+        ('IN', re.compile(r'\b\d{6}\b')),
+        ('SE', re.compile(r'\b\d{3}\s\d{2}\b')),
+    )
+
+    US_ZIP = re.compile(r'\b\d{5}(?:-\d{4})?\b')
+    EU_FIVE_DIGIT = re.compile(r'\b\d{5}\b')
+    FOUR_DIGIT = re.compile(r'\b\d{4}\b')
+
+    # Unambiguous country phrases only — never short codes like ca/in/no/de
     COUNTRY_INDICATORS = {
-        'US': ['usa', 'united states', 'america', 'us'],
-        'CA': ['canada', 'can', 'ca'],
-        'UK': ['uk', 'united kingdom', 'britain', 'england', 'scotland', 'wales'],
-        'DE': ['germany', 'deutschland', 'de'],
-        'FR': ['france', 'fr'],
-        'IT': ['italy', 'italia', 'it'],
-        'ES': ['spain', 'españa', 'es'],
-        'IN': ['india', 'bharat', 'in'],
-        'AU': ['australia', 'au'],
-        'NL': ['netherlands', 'holland', 'nl'],
-        'SE': ['sweden', 'sverige', 'se'],
-        'NO': ['norway', 'norge', 'no'],
-        'CH': ['switzerland', 'schweiz', 'ch'],
+        'US': [
+            'united states of america',
+            'united states',
+            'u.s.a.',
+            'u.s.',
+            'usa',
+        ],
+        'CA': ['canada'],
+        'UK': [
+            'united kingdom',
+            'great britain',
+            'britain',
+            'england',
+            'scotland',
+            'wales',
+            'uk',
+        ],
+        'DE': ['deutschland', 'germany'],
+        'FR': ['france'],
+        'IT': ['italia', 'italy'],
+        'ES': ['españa', 'espana', 'spain'],
+        'IN': ['bharat', 'india'],
+        'AU': ['australia'],
+        'NL': ['netherlands', 'holland'],
+        'SE': ['sverige', 'sweden'],
+        'NO': ['norge', 'norway'],
+        'CH': ['schweiz', 'switzerland'],
     }
-    
+
+    US_STATE_ABBREVIATIONS = {
+        'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID',
+        'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS',
+        'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK',
+        'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV',
+        'WI', 'WY', 'DC',
+    }
+
+    # Street / locale hints for European 5-digit postcodes
+    REGION_STREET_HINTS = {
+        'DE': [
+            r'stra[sß]e', r'\bstr\.', r'\bplatz\b', r'\ballee\b', r'berlin',
+            r'münchen', r'muenchen', r'hamburg', r'köln', r'koeln',
+        ],
+        'FR': [
+            r'\brue\b', r'\bavenue\b', r'\bboulevard\b', r'\bcédex\b', r'\bcedex\b',
+            r'paris', r'lyon', r'marseille',
+        ],
+        'IT': [r'\bvia\b', r'\bpiazza\b', r'roma', r'milano'],
+        'ES': [r'\bcalle\b', r'\bavda\b', r'madrid', r'barcelona'],
+    }
+
     @classmethod
     def detect_region(cls, address: str) -> str:
         """Detect the region/country of an address."""
+        if not address or not address.strip():
+            return 'US'
+
         address_lower = address.lower()
-        
-        # First check for explicit country mentions using word boundaries
+
+        # 1) Explicit country names (longest phrases first within each region)
         for country_code, indicators in cls.COUNTRY_INDICATORS.items():
-            for indicator in indicators:
-                # Use word boundaries to avoid false positives like "in" matching "main"
-                pattern = r'\b' + re.escape(indicator) + r'\b'
+            for indicator in sorted(indicators, key=len, reverse=True):
+                pattern = r'\b' + re.escape(indicator).replace(r'\ ', r'\s+') + r'\b'
                 if re.search(pattern, address_lower):
                     return country_code
-        
-        # Check postal code patterns
-        for country_code, pattern in cls.POSTAL_PATTERNS.items():
-            if re.search(pattern, address, re.IGNORECASE):
+
+        # 2) Distinctive postal formats
+        for country_code, pattern in cls.DISTINCTIVE_POSTAL:
+            if pattern.search(address):
                 return country_code
-        
-        # Default to US if no clear indicators
+
+        # 3) US state abbreviation + ZIP
+        if cls._looks_like_us(address):
+            return 'US'
+
+        # 4) European hints + 5-digit postcode
+        if cls.EU_FIVE_DIGIT.search(address):
+            for country_code, hints in cls.REGION_STREET_HINTS.items():
+                for hint in hints:
+                    if re.search(hint, address_lower):
+                        return country_code
+
+        # 5) Four-digit postcodes only with remaining regional hints
+        if cls.FOUR_DIGIT.search(address):
+            if re.search(r'\b(oslo|bergen|trondheim)\b', address_lower):
+                return 'NO'
+            if re.search(r'\b(zürich|zurich|geneva|bern|basel)\b', address_lower):
+                return 'CH'
+            if re.search(r'\b(sydney|melbourne|brisbane|perth|nsw|qld|vic)\b', address_lower):
+                return 'AU'
+
         return 'US'
+
+    @classmethod
+    def _looks_like_us(cls, address: str) -> bool:
+        """True when address has a US state abbreviation and a ZIP-like code."""
+        if not cls.US_ZIP.search(address):
+            # State alone is weak signal; still useful with city, ST pattern
+            tokens = re.findall(r'\b([A-Z]{2})\b', address.upper())
+            return any(token in cls.US_STATE_ABBREVIATIONS for token in tokens)
+
+        # Prefer "City, ST 12345" patterns
+        if re.search(
+            r',\s*([A-Z]{2})\s+\d{5}(?:-\d{4})?\b',
+            address,
+            re.I,
+        ):
+            state = re.search(
+                r',\s*([A-Z]{2})\s+\d{5}(?:-\d{4})?\b',
+                address,
+                re.I,
+            ).group(1).upper()
+            return state in cls.US_STATE_ABBREVIATIONS
+
+        tokens = re.findall(r'\b([A-Z]{2})\b', address.upper())
+        return any(token in cls.US_STATE_ABBREVIATIONS for token in tokens)
 
 
 class AddressParser:
@@ -198,53 +275,64 @@ class AddressParser:
     def _parse_indian_address(self, address: str) -> Dict[str, str]:
         """Parse Indian address format with pincode, area, landmark support."""
         components = {}
-        
+
+        # Strip country labels so they are not mistaken for city
+        for country in ('india', 'bharat'):
+            if re.search(rf'\b{country}\b', address, re.I):
+                components['country'] = 'India'
+                address = re.sub(rf'\b{country}\b', '', address, flags=re.I).strip(' ,')
+
         # Extract pincode (6 digits)
         pincode_match = re.search(r'\b(\d{6})\b', address)
         if pincode_match:
             components['postal_code'] = pincode_match.group(1)
-            address = address.replace(pincode_match.group(0), '').strip()
-        
-        # Extract state (often at the end)
-        indian_states = ['andhra pradesh', 'arunachal pradesh', 'assam', 'bihar', 'chhattisgarh', 
-                        'goa', 'gujarat', 'haryana', 'himachal pradesh', 'jharkhand', 'karnataka',
-                        'kerala', 'madhya pradesh', 'maharashtra', 'manipur', 'meghalaya', 'mizoram',
-                        'nagaland', 'odisha', 'punjab', 'rajasthan', 'sikkim', 'tamil nadu', 'telangana',
-                        'tripura', 'uttar pradesh', 'uttarakhand', 'west bengal', 'delhi', 'mumbai',
-                        'kolkata', 'chennai', 'bangalore', 'hyderabad', 'pune', 'ahmedabad']
-        
-        for state in indian_states:
-            if state in address.lower():
+            address = address.replace(pincode_match.group(0), '').strip(' ,')
+
+        indian_states = [
+            'andhra pradesh', 'arunachal pradesh', 'assam', 'bihar', 'chhattisgarh',
+            'goa', 'gujarat', 'haryana', 'himachal pradesh', 'jharkhand', 'karnataka',
+            'kerala', 'madhya pradesh', 'maharashtra', 'manipur', 'meghalaya', 'mizoram',
+            'nagaland', 'odisha', 'punjab', 'rajasthan', 'sikkim', 'tamil nadu', 'telangana',
+            'tripura', 'uttar pradesh', 'uttarakhand', 'west bengal', 'delhi',
+        ]
+        indian_cities = [
+            'mumbai', 'bombay', 'kolkata', 'calcutta', 'chennai', 'madras', 'bangalore',
+            'bengaluru', 'hyderabad', 'pune', 'ahmedabad', 'jaipur', 'lucknow', 'chandigarh',
+            'noida', 'gurgaon', 'gurugram', 'new delhi',
+        ]
+
+        for state in sorted(indian_states, key=len, reverse=True):
+            if re.search(rf'\b{re.escape(state)}\b', address, re.I):
                 components['state'] = state.title()
-                address = re.sub(re.escape(state), '', address, flags=re.IGNORECASE).strip()
+                address = re.sub(rf'\b{re.escape(state)}\b', '', address, flags=re.I).strip(' ,')
                 break
-        
-        # Extract city/district (common Indian city names)
-        parts = [part.strip() for part in address.split(',')]
-        
-        # House/flat number often starts with flat, apartment, house, etc.
-        house_match = re.search(r'^(flat|apartment|house|plot|door|no\.?)\s*[#-]?\s*([a-z0-9/-]+)', address, re.IGNORECASE)
+
+        for city in sorted(indian_cities, key=len, reverse=True):
+            if re.search(rf'\b{re.escape(city)}\b', address, re.I):
+                components['city'] = city.title()
+                address = re.sub(rf'\b{re.escape(city)}\b', '', address, flags=re.I).strip(' ,')
+                break
+
+        house_match = re.search(
+            r'^(flat|apartment|house|plot|door|no\.?)\s*[#-]?\s*([a-z0-9/-]+)',
+            address,
+            re.IGNORECASE,
+        )
         if house_match:
             components['house_number'] = house_match.group(2)
-            address = address[len(house_match.group(0)):].strip()
+            address = address[len(house_match.group(0)):].strip(' ,')
         else:
-            # Extract leading number
             number_match = re.match(r'^([0-9]+[a-z]?[-/]?[0-9]*[a-z]?)\s+', address)
             if number_match:
                 components['house_number'] = number_match.group(1)
-                address = address[len(number_match.group(0)):].strip()
-        
-        # Remaining parsing for street and area
+                address = address[len(number_match.group(0)):].strip(' ,')
+
         parts = [part.strip() for part in address.split(',') if part.strip()]
-        
-        if len(parts) >= 1:
+        if parts and 'street' not in components:
             components['street'] = parts[0]
-        if len(parts) >= 2:
-            components['city'] = parts[-1]  # City usually last
-            if len(parts) >= 3:
-                # Middle parts could be area/locality
-                components['area'] = ', '.join(parts[1:-1])
-        
+        if len(parts) >= 2 and 'city' not in components:
+            components['city'] = parts[-1]
+
         return components
     
     def _parse_uk_address(self, address: str) -> Dict[str, str]:
@@ -442,30 +530,63 @@ class AddressParser:
     def _parse_us_address(self, address: str, existing_components: Optional[Dict[str, str]] = None) -> Dict[str, str]:
         """Parse US address format."""
         components = existing_components or {}
-        
+
+        # Strip country so it is not treated as city
+        for country in (
+            'united states of america',
+            'united states',
+            'u.s.a.',
+            'u.s.',
+            'usa',
+        ):
+            if re.search(rf'\b{re.escape(country)}\b', address, re.I):
+                components['country'] = 'USA'
+                address = re.sub(rf'\b{re.escape(country)}\b', '', address, flags=re.I).strip(' ,')
+                break
+
         # Extract US postal code (5 or 9 digits)
         if 'postal_code' not in components:
             postal_match = re.search(r'\b(\d{5}(-\d{4})?)\b', address)
             if postal_match:
                 components['postal_code'] = postal_match.group(1)
-                address = address.replace(postal_match.group(0), '').strip()
-        
-        # Extract state abbreviations
-        us_states = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 
-                    'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 
-                    'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 
-                    'VA', 'WA', 'WV', 'WI', 'WY', 'DC']
-        
-        for state in us_states:
-            if f' {state} ' in address.upper() or address.upper().endswith(f' {state}'):
-                components['state'] = state
-                address = re.sub(f'\\b{state}\\b', '', address, flags=re.IGNORECASE).strip()
-                break
-        
-        # Clean up trailing commas and extra spaces after removing postal code and state
+                address = address.replace(postal_match.group(0), '').strip(' ,')
+
+        us_state_names = {
+            'ALABAMA': 'AL', 'ALASKA': 'AK', 'ARIZONA': 'AZ', 'ARKANSAS': 'AR',
+            'CALIFORNIA': 'CA', 'COLORADO': 'CO', 'CONNECTICUT': 'CT', 'DELAWARE': 'DE',
+            'FLORIDA': 'FL', 'GEORGIA': 'GA', 'HAWAII': 'HI', 'IDAHO': 'ID',
+            'ILLINOIS': 'IL', 'INDIANA': 'IN', 'IOWA': 'IA', 'KANSAS': 'KS',
+            'KENTUCKY': 'KY', 'LOUISIANA': 'LA', 'MAINE': 'ME', 'MARYLAND': 'MD',
+            'MASSACHUSETTS': 'MA', 'MICHIGAN': 'MI', 'MINNESOTA': 'MN',
+            'MISSISSIPPI': 'MS', 'MISSOURI': 'MO', 'MONTANA': 'MT', 'NEBRASKA': 'NE',
+            'NEVADA': 'NV', 'NEW HAMPSHIRE': 'NH', 'NEW JERSEY': 'NJ',
+            'NEW MEXICO': 'NM', 'NEW YORK': 'NY', 'NORTH CAROLINA': 'NC',
+            'NORTH DAKOTA': 'ND', 'OHIO': 'OH', 'OKLAHOMA': 'OK', 'OREGON': 'OR',
+            'PENNSYLVANIA': 'PA', 'RHODE ISLAND': 'RI', 'SOUTH CAROLINA': 'SC',
+            'SOUTH DAKOTA': 'SD', 'TENNESSEE': 'TN', 'TEXAS': 'TX', 'UTAH': 'UT',
+            'VERMONT': 'VT', 'VIRGINIA': 'VA', 'WASHINGTON': 'WA',
+            'WEST VIRGINIA': 'WV', 'WISCONSIN': 'WI', 'WYOMING': 'WY',
+            'DISTRICT OF COLUMBIA': 'DC',
+        }
+        if 'state' not in components:
+            for name, abbr in sorted(us_state_names.items(), key=lambda x: -len(x[0])):
+                if re.search(rf'\b{re.escape(name)}\b', address, re.I):
+                    components['state'] = abbr
+                    address = re.sub(rf'\b{re.escape(name)}\b', '', address, flags=re.I).strip(' ,')
+                    break
+
+        us_states = list(us_state_names.values())
+        if 'state' not in components:
+            for state in us_states:
+                if re.search(rf'\b{state}\b', address, re.I):
+                    components['state'] = state
+                    address = re.sub(rf'\b{state}\b', '', address, flags=re.I).strip(' ,')
+                    break
+
         address = re.sub(r'\s*,\s*$', '', address).strip()
         address = re.sub(r'\s+', ' ', address)
-        
+        address = re.sub(r',\s*,+', ',', address)
+
         result = self._parse_generic_address(address, components)
         return result if result is not None else components
     

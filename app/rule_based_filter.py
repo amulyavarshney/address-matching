@@ -238,8 +238,19 @@ class RuleBasedFilter:
         logger.debug(f"Applying region-specific rules for {self.region}")
         
         # Rule 1: Check overall similarity threshold
-        if overall_similarity < self.overall_threshold:
-            logger.debug(f"Overall similarity {overall_similarity} below threshold {self.overall_threshold}")
+        # Indian addresses: strong pincode match allows a slightly lower overall score
+        effective_overall = self.overall_threshold
+        if (
+            self.region == 'IN'
+            and similarities.postal_code is not None
+            and similarities.postal_code >= 0.95
+        ):
+            effective_overall = min(self.overall_threshold, 0.55)
+
+        if overall_similarity < effective_overall:
+            logger.debug(
+                f"Overall similarity {overall_similarity} below threshold {effective_overall}"
+            )
             return False
         
         # Rule 2: Region-specific postal code matching
@@ -305,7 +316,14 @@ class RuleBasedFilter:
         """Enhanced city matching rule with regional variations."""
         if not self.require_city_match:
             return True
-        
+
+        # Both missing city: do not fail when other strong signals exist (e.g. IN pincode)
+        if addr1.city is None and addr2.city is None:
+            if self.region == 'IN' and similarities.postal_code and similarities.postal_code >= 0.9:
+                return True
+            logger.debug("City information missing")
+            return False
+
         if similarities.city is None:
             logger.debug("City information missing")
             return False
@@ -432,7 +450,7 @@ class RuleBasedFilter:
     def _check_indian_specific_rules(self, similarities: ComponentSimilarities, addr1: NormalizedAddress, addr2: NormalizedAddress) -> bool:
         """Indian address specific matching rules."""
         # Rule: If pincode matches exactly, be more lenient with other components
-        if similarities.postal_code and similarities.postal_code > 0.95:
+        if similarities.postal_code and similarities.postal_code >= 0.95:
             logger.debug("Indian pincode matches exactly, applying lenient rules")
             return True
         
@@ -444,7 +462,7 @@ class RuleBasedFilter:
             
             if addr1_has_locality and addr2_has_locality:
                 # Both have locality info, require decent street similarity
-                return similarities.street is None or similarities.street > 0.5
+                return similarities.street is None or similarities.street >= 0.5
         
         return True
     

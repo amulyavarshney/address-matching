@@ -13,6 +13,28 @@ A comprehensive RESTful microservice for address matching that incorporates addr
 - **Error Handling**: Graceful degradation when optional services are unavailable
 - **Performance**: Caching and rate limiting for external API calls
 
+## Library usage
+
+```python
+from app import create_matcher
+
+matcher = create_matcher({
+    "use_ml_model": False,
+    "use_geospatial": False,
+    "default_region": "US",
+})
+
+result = await matcher.match_addresses(
+    "123 Main St, Anytown, CA 90210",
+    "123 Main Street, Anytown, California 90210",
+    region="US",
+)
+print(result.match, result.confidence_score)
+```
+
+`create_matcher(..., apply_env=False)` is the default for deterministic embedding.
+Use `create_app()` only when running the HTTP service (`main.py` / `run.py`).
+
 ## Quick Start
 
 ### Prerequisites

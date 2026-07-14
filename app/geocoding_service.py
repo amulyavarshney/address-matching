@@ -11,10 +11,10 @@ try:
     from geopy.distance import geodesic
     from geopy.exc import GeocoderTimedOut, GeocoderServiceError
     GEOPY_AVAILABLE = True
-    logger.info("Geopy library is available")
+    logger.debug("Geopy library is available")
 except ImportError:
     GEOPY_AVAILABLE = False
-    logger.warning("Geopy library not available, geospatial validation disabled")
+    logger.debug("Geopy library not available, geospatial validation disabled")
 
 
 class GeocodingService:
@@ -39,12 +39,17 @@ class GeocodingService:
         else:
             self.geolocator = None
             
-        # Rate limiting
+        # Rate limiting (protected by async lock for concurrent callers)
         self.last_request_time = 0
         self.min_request_interval = 1.0  # 1 second between requests to be respectful
+        self._rate_lock: Optional[asyncio.Lock] = None
         
-        logger.info(f"GeocodingService initialized with user_agent: {user_agent}")
-    
+        logger.debug(f"GeocodingService initialized with user_agent: {user_agent}")
+
+    def _get_rate_lock(self) -> asyncio.Lock:
+        if self._rate_lock is None:
+            self._rate_lock = asyncio.Lock()
+        return self._rate_lock    
     async def geocode_address(self, address: str) -> Optional[Tuple[float, float]]:
         """
         Geocode an address to get latitude and longitude.
@@ -100,15 +105,16 @@ class GeocodingService:
             return None
     
     async def _rate_limit(self):
-        """Implement rate limiting for geocoding requests."""
-        current_time = time.time()
-        time_since_last_request = current_time - self.last_request_time
-        
-        if time_since_last_request < self.min_request_interval:
-            wait_time = self.min_request_interval - time_since_last_request
-            await asyncio.sleep(wait_time)
-        
-        self.last_request_time = time.time()
+        """Implement rate limiting for geocoding requests (concurrency-safe)."""
+        async with self._get_rate_lock():
+            current_time = time.time()
+            time_since_last_request = current_time - self.last_request_time
+
+            if time_since_last_request < self.min_request_interval:
+                wait_time = self.min_request_interval - time_since_last_request
+                await asyncio.sleep(wait_time)
+
+            self.last_request_time = time.time()
     
     @lru_cache(maxsize=1000)
     def _geocode_cached(self, address: str):
@@ -119,7 +125,7 @@ class GeocodingService:
     
     async def _geocode_with_cache(self, address: str):
         """Async wrapper for cached geocoding."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._geocode_cached, address)
     
     def calculate_distance(
