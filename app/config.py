@@ -352,6 +352,14 @@ class AddressMatchingConfig:
         if geo_provider:
             geocoding_config['provider'] = geo_provider.strip().lower()
 
+        geo_api_key = (
+            os.getenv('GEOCODING_API_KEY')
+            or os.getenv('GOOGLE_GEOCODING_API_KEY')
+            or os.getenv('MAPBOX_ACCESS_TOKEN')
+        )
+        if geo_api_key:
+            geocoding_config['api_key'] = geo_api_key
+
         # Component toggles (DISABLE_* wins over USE_*)
         use_ml = self._env_bool('USE_ML_MODEL')
         if use_ml is not None:
@@ -449,6 +457,7 @@ class AddressMatchingConfig:
             ),
             'geocoding_timeout': geocoding.get('timeout', 10),
             'geocoding_provider': geocoding.get('provider', 'nominatim'),
+            'geocoding_api_key': geocoding.get('api_key'),
             'ml_model_path': ml.get('model_path'),
             'ml_auto_train': ml.get('auto_train', False),
             # Global threshold overrides only — never full regional templates

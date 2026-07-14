@@ -231,6 +231,42 @@ def test_rate_limit_returns_429(monkeypatch):
         assert test_client.get("/health").status_code == 200
 
 
+def test_metrics_and_request_id(client):
+    test_client, _ = client
+    response = test_client.get("/metrics")
+    assert response.status_code == 200
+    assert "address_matching_http_requests_total" in response.text
+
+    match = test_client.post(
+        "/match-addresses",
+        headers={"X-Request-ID": "test-req-123"},
+        json={
+            "address1": "123 Main St, Anytown, CA 90210",
+            "address2": "123 Main Street, Anytown, CA 90210",
+        },
+    )
+    assert match.status_code == 200
+    assert match.headers.get("X-Request-ID") == "test-req-123"
+
+    metrics_resp = test_client.get("/metrics")
+    assert "address_matching_match_requests_total" in metrics_resp.text
+
+
+def test_google_provider_requires_api_key():
+    from app.geocoders import build_provider
+
+    provider = build_provider("google", api_key=None)
+    assert provider.available is False
+    assert provider.name == "google"
+
+
+def test_none_geocoding_provider():
+    from app.geocoding_service import GeocodingService
+
+    service = GeocodingService(provider="none", enabled=True)
+    assert service.geopy_available is False
+
+
 def test_region_registry_is_single_source():
     from app.regions import RegionRegistry
     from app.fuzzy_matcher import RegionAwareWeights

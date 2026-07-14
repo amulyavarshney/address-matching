@@ -33,6 +33,7 @@ class AddressMatcher:
             timeout=int(self.config.get('geocoding_timeout', 10)),
             provider=self.config.get('geocoding_provider', 'nominatim'),
             enabled=bool(self.config.get('use_geospatial', True)),
+            api_key=self.config.get('geocoding_api_key'),
         )
         self.ml_model = AddressMatchingMLModel(
             model_path=self.config.get('ml_model_path'),

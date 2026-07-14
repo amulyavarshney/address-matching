@@ -199,6 +199,10 @@ View the interactive API documentation at `/docs`.
 
 Returns `{ "results": [...], "count": N }`. Max batch size is controlled by `MAX_BATCH_SIZE` (default 50).
 
+**GET** `/metrics`
+
+Prometheus-compatible metrics (request counts, match totals, errors).
+
 ### Authentication
 
 When `API_KEY` is set, protected routes require header `X-API-Key: <key>`.

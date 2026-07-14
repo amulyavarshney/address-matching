@@ -17,6 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 COPY main.py run.py ./
+COPY scripts ./scripts
 
 # Non-root user for production
 RUN useradd --create-home --uid 1000 appuser \
