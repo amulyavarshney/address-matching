@@ -102,8 +102,15 @@ def create_app(
         RateLimitMiddleware,
         enabled=bool(api_settings.get("rate_limiting", True)),
         max_requests_per_minute=int(api_settings.get("max_requests_per_minute", 60)),
+        backend_name=str(api_settings.get("rate_limit_backend", "memory")),
+        redis_url=api_settings.get("redis_url"),
     )
     app.add_middleware(RequestIdMiddleware)
+
+    # Optional OpenTelemetry (no-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set)
+    from app.tracing import setup_tracing
+
+    setup_tracing(app, service_name="address-matching")
 
     matcher = AddressMatcher(matcher_config)
     app.state.matcher = matcher

@@ -98,6 +98,8 @@ class AddressMatchingConfig:
                 'cors_origins': ['*'],
                 'max_address_length': 500,
                 'max_batch_size': 50,
+                'rate_limit_backend': 'memory',
+                'redis_url': None,
             },
             'logging': {
                 'log_requests': True,
@@ -348,6 +350,14 @@ class AddressMatchingConfig:
         if max_rpm is not None:
             security_config['max_requests_per_minute'] = max_rpm
 
+        rate_limit_backend = os.getenv('RATE_LIMIT_BACKEND')
+        if rate_limit_backend:
+            security_config['rate_limit_backend'] = rate_limit_backend.strip().lower()
+
+        redis_url = os.getenv('REDIS_URL')
+        if redis_url:
+            security_config['redis_url'] = redis_url
+
         geo_provider = os.getenv('GEOCODING_PROVIDER')
         if geo_provider:
             geocoding_config['provider'] = geo_provider.strip().lower()
@@ -487,6 +497,8 @@ class AddressMatchingConfig:
             'max_batch_size': int(security.get('max_batch_size', 50)),
             'rate_limiting': bool(security.get('rate_limiting', True)),
             'max_requests_per_minute': int(security.get('max_requests_per_minute', 60)),
+            'rate_limit_backend': security.get('rate_limit_backend', 'memory'),
+            'redis_url': security.get('redis_url') or os.getenv('REDIS_URL'),
         }
     
     def __str__(self) -> str:

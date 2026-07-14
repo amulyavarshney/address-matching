@@ -280,6 +280,7 @@ REQUIRE_STREET_MATCH=true
 
 # ML Model configuration
 ML_MODEL_PATH=address_matching_model.pkl
+# ML_AUTO_TRAIN=false   # never auto-train/write models on import in production
 
 # API Configuration
 API_HOST=0.0.0.0
@@ -289,8 +290,38 @@ CORS_ORIGINS=*
 MAX_ADDRESS_LENGTH=500
 MAX_BATCH_SIZE=50
 
+# Rate limiting (API)
+RATE_LIMITING=true
+MAX_REQUESTS_PER_MINUTE=60
+RATE_LIMIT_BACKEND=memory   # or redis
+# REDIS_URL=redis://localhost:6379/0
+
+# OpenTelemetry (optional; requires requirements-optional.txt)
+# OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318/v1/traces
+# OTEL_SERVICE_NAME=address-matching
+
 # Logging
 LOG_LEVEL=INFO
+```
+
+See `.env.example` for the full list. Optional packages (libpostal, Redis, OpenTelemetry)
+are listed in `requirements-optional.txt`.
+
+### Offline ML training
+
+Train a model without starting the API:
+
+```bash
+# Synthetic bootstrap (dev only)
+python scripts/train_ml_model.py --synthetic --output address_matching_model.pkl
+
+# Labeled address pairs (address1,address2,match[,region,geospatial_distance_meters])
+python scripts/train_ml_model.py --pairs data/sample_labeled_pairs.csv \
+    --output address_matching_model.pkl
+
+# Precomputed feature rows + label
+python scripts/train_ml_model.py --features data/sample_features.csv \
+    --output address_matching_model.pkl
 ```
 
 ## Architecture
@@ -371,12 +402,12 @@ See the root `Dockerfile` and `docker-compose.yml` for the production image (Pyt
 
 ### Production Considerations
 
-1. **API Keys**: Configure geocoding service API keys for production use
-2. **Rate Limiting**: Implement request rate limiting at the API gateway level
-3. **Monitoring**: Add metrics collection and alerting
-4. **Scaling**: Use multiple instances behind a load balancer
-5. **Database**: Consider caching geocoding results in a database
-6. **Security**: Implement authentication and input validation
+1. **API Keys**: Set `API_KEY` and geocoding provider keys (`GOOGLE_MAPS_API_KEY` / `MAPBOX_ACCESS_TOKEN`) as needed
+2. **Rate Limiting**: Use built-in `RATE_LIMITING` (memory or Redis via `RATE_LIMIT_BACKEND=redis`) and/or an API gateway
+3. **Monitoring**: Scrape `/metrics`; set `OTEL_EXPORTER_OTLP_ENDPOINT` for distributed tracing
+4. **Scaling**: Multiple instances behind a load balancer; use Redis rate limiting so counters are shared
+5. **ML**: Train offline with `scripts/train_ml_model.py`; keep `ML_AUTO_TRAIN=false` in production
+6. **Security**: Prefer explicit `CORS_ORIGINS`; avoid logging full addresses (`LOG_ADDRESS_PII` defaults to hashed)
 
 ## API Documentation
 

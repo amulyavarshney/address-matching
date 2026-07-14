@@ -1,0 +1,9 @@
+address1,address2,match,region,geospatial_distance_meters
+"123 Main Street, Anytown, CA 90210, USA","123 Main St, Anytown, California 90210, United States",1,US,12
+"10 Downing Street, London SW1A 2AA, UK","10 Downing St, London SW1A2AA, United Kingdom",1,UK,8
+"Musterstraße 123, 12345 Berlin, Deutschland","Muster Str 123, 12345 Berlin, Germany",1,DE,5
+"Flat 2B, Krishna Nagar, Mumbai 400001, India","2-B Krishna Ngr, Bombay 400001, India",1,IN,
+"123 Main Street, Anytown, CA 90210, USA","10 Downing Street, London SW1A 2AA, UK",0,US,
+"1 Infinite Loop, Cupertino, CA 95014","1600 Amphitheatre Parkway, Mountain View, CA 94043",0,US,15000
+"221B Baker Street, London NW1 6XE","221B Baker St, London NW1 6XE, UK",1,UK,3
+"Hauptstraße 45, 80331 München","Somewhere Else 9, 10115 Berlin",0,DE,500000

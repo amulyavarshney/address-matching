@@ -275,3 +275,61 @@ def test_region_registry_is_single_source():
     assert RegionAwareWeights.get_weights("IN") == RegionRegistry.get_weights("IN")
     assert RegionSpecificRules.get_config("DE") == RegionRegistry.get_rules("DE")
     assert "IN" in RegionRegistry.supported_regions()
+
+
+def test_memory_rate_limit_backend():
+    from app.rate_limit_backend import MemoryRateLimitBackend
+
+    backend = MemoryRateLimitBackend()
+    assert backend.allow("k", 2, 60.0)[0] is True
+    assert backend.allow("k", 2, 60.0)[0] is True
+    allowed, retry = backend.allow("k", 2, 60.0)
+    assert allowed is False
+    assert retry >= 1
+
+
+def test_redis_backend_falls_back_without_url():
+    from app.rate_limit_backend import build_rate_limit_backend, MemoryRateLimitBackend
+
+    backend = build_rate_limit_backend("redis", redis_url=None)
+    assert isinstance(backend, MemoryRateLimitBackend)
+
+
+def test_tracing_noop_without_endpoint(monkeypatch):
+    from fastapi import FastAPI
+
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    from app.tracing import setup_tracing
+
+    assert setup_tracing(FastAPI()) is False
+
+
+def test_train_from_features_csv(tmp_path):
+    from app.ml_model import AddressMatchingMLModel
+
+    model = AddressMatchingMLModel(
+        model_path=str(tmp_path / "m.pkl"),
+        auto_train=False,
+    )
+    accuracy = model.train_from_features_csv(
+        "data/sample_features.csv",
+        save=True,
+    )
+    assert model.is_trained is True
+    assert 0.0 <= accuracy <= 1.0
+    assert (tmp_path / "m.pkl").exists()
+
+
+def test_train_from_pairs_csv(tmp_path):
+    from app.ml_model import AddressMatchingMLModel
+
+    model = AddressMatchingMLModel(
+        model_path=str(tmp_path / "pairs.pkl"),
+        auto_train=False,
+    )
+    accuracy = model.train_from_labeled_pairs_csv(
+        "data/sample_labeled_pairs.csv",
+        save=True,
+    )
+    assert model.is_trained is True
+    assert 0.0 <= accuracy <= 1.0

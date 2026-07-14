@@ -1,5 +1,15 @@
-# Optional dependencies (require system libraries)
-# Install libpostal first, then:
+# Optional dependencies
+# Install as needed:
 #   pip install -r requirements-optional.txt
 
+# libpostal Python bindings (requires system libpostal)
 postal==1.1.10
+
+# Redis-backed rate limiting (multi-instance)
+redis==5.2.1
+
+# OpenTelemetry tracing
+opentelemetry-api==1.30.0
+opentelemetry-sdk==1.30.0
+opentelemetry-exporter-otlp-proto-http==1.30.0
+opentelemetry-instrumentation-fastapi==0.51b0
